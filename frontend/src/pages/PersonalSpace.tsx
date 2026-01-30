@@ -91,7 +91,7 @@ export default function PersonalSpace() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-4">내 개인 Space</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 기록</h1>
 
       {/* 입력 창 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">

@@ -44,7 +44,7 @@ export default function PartSpace() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.part?.name} 파트 Space</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.part?.name} 업무 기록</h1>
       <p className="text-sm text-gray-500 mb-6">{data.users?.length || 0}명</p>
 
       {/* 보고서 */}

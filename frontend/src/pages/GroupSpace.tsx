@@ -47,7 +47,7 @@ export default function GroupSpace() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.group?.name} 그룹 Space</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.group?.name} 업무 기록</h1>
       <p className="text-sm text-gray-500 mb-6">{data.parts?.length || 0}개 파트</p>
 
       {/* 보고서 */}

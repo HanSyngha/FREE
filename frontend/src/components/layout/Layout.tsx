@@ -74,55 +74,60 @@ export default function Layout() {
           aria-hidden={!sidebarOpen}
         >
             <nav className="space-y-1" aria-label="팀 구조 탐색">
-              {/* 개인 Space */}
+              {/* 나의 업무 기록 */}
               <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2 px-3">내 공간</p>
                 <NavLink to="/space/personal" className={navLinkClass}>
-                  내 개인 Space
+                  나의 업무 기록
                 </NavLink>
               </div>
 
-              {/* 팀 Space */}
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2 px-3">팀</p>
-                <NavLink to="/space/team" className={navLinkClass}>
-                  {sidebarData?.team?.name || '팀'} Space
-                </NavLink>
-              </div>
+              {/* 팀 → 그룹 → 파트 트리 */}
+              {sidebarData?.team && (
+                <div className="mb-3">
+                  {/* 팀 */}
+                  <NavLink to="/space/team" className={({ isActive }) =>
+                    `block px-3 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                      isActive ? 'bg-primary-100 text-primary-700' : 'text-gray-700 hover:bg-gray-100'
+                    }`
+                  }>
+                    {sidebarData.team.name}
+                  </NavLink>
 
-              {/* 그룹/파트 */}
-              {sidebarData?.team?.groups?.map((group: any) => {
-                const isMyGroup = user?.groupId === group.id;
-                return (
-                  <div key={group.id} className="mb-3">
-                    <NavLink to={`/space/group/${group.id}`} className={({ isActive }) =>
-                      `block px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                        isActive ? 'bg-primary-100 text-primary-700 font-medium'
-                          : isMyGroup ? 'text-primary-600 font-medium hover:bg-primary-50'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`
-                    }>
-                      {group.name}
-                      {isMyGroup && <span className="ml-1 text-[10px] text-primary-400">내 그룹</span>}
-                    </NavLink>
-                    {group.parts?.map((part: any) => {
-                      const isMyPart = user?.partId === part.id;
-                      return (
-                        <NavLink key={part.id} to={`/space/part/${part.id}`} className={({ isActive }) =>
-                          `block pl-8 pr-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                            isActive ? 'bg-primary-50 text-primary-600 font-medium'
-                              : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
-                              : 'text-gray-500 hover:bg-gray-50'
+                  {/* 그룹 → 파트 */}
+                  {sidebarData.team.groups?.map((group: any) => {
+                    const isMyGroup = user?.groupId === group.id;
+                    return (
+                      <div key={group.id} className="mt-1">
+                        <NavLink to={`/space/group/${group.id}`} className={({ isActive }) =>
+                          `block pl-6 pr-3 py-1.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                            isActive ? 'bg-primary-100 text-primary-700 font-medium'
+                              : isMyGroup ? 'text-primary-600 font-medium hover:bg-primary-50'
+                              : 'text-gray-600 hover:bg-gray-100'
                           }`
                         }>
-                          {part.name}
-                          {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
+                          {group.name}
+                          {isMyGroup && <span className="ml-1 text-[10px] text-primary-400">내 그룹</span>}
                         </NavLink>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                        {group.parts?.map((part: any) => {
+                          const isMyPart = user?.partId === part.id;
+                          return (
+                            <NavLink key={part.id} to={`/space/part/${part.id}`} className={({ isActive }) =>
+                              `block pl-10 pr-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                                isActive ? 'bg-primary-50 text-primary-600 font-medium'
+                                  : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
+                                  : 'text-gray-500 hover:bg-gray-50'
+                              }`
+                            }>
+                              {part.name}
+                              {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Admin 메뉴 */}
               {(isSuperAdmin || isTeamAdmin) && (
