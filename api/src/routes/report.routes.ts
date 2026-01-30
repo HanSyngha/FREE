@@ -133,6 +133,40 @@ reportRoutes.get('/:id/export', authenticateToken, loadUser, async (req: Authent
   }
 });
 
+// DELETE /reports/:id - 보고서 삭제 (Team Admin / Super Admin)
+reportRoutes.delete('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+    const id = req.params.id as string;
+    const report = await prisma.report.findUnique({
+      where: { id },
+      include: { space: true },
+    });
+    if (!report) { res.status(404).json({ error: '보고서를 찾을 수 없습니다.' }); return; }
+
+    // 권한 체크: SuperAdmin 또는 해당 팀의 TeamAdmin
+    const { isSuperAdmin } = await import('../middleware/auth.js');
+    const isSA = isSuperAdmin(req.user!.loginid);
+
+    if (!isSA) {
+      // TeamAdmin 체크
+      const teamAdmin = await prisma.teamAdmin.findFirst({
+        where: { userId: user.id, teamId: report.space.teamId! },
+      });
+      if (!teamAdmin) {
+        res.status(403).json({ error: 'Team Admin 이상 권한이 필요합니다.' });
+        return;
+      }
+    }
+
+    await prisma.report.delete({ where: { id } });
+    res.json({ success: true, message: '보고서가 삭제되었습니다.' });
+  } catch (error) {
+    console.error('Delete report error:', error);
+    res.status(500).json({ error: '보고서 삭제에 실패했습니다.' });
+  }
+});
+
 // POST /reports/resume - 실패한 보고서 생성 재개
 reportRoutes.post('/resume', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {

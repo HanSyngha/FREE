@@ -2,10 +2,11 @@
  * Report Detail Page
  */
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { reportsApi } from '../services/api';
+import { useAuthStore } from '../stores/authStore';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function formatDateWithDay(iso: string) {
@@ -16,6 +17,8 @@ function formatDateWithDay(iso: string) {
 
 export default function ReportDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { isSuperAdmin, isTeamAdmin } = useAuthStore();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,6 +26,18 @@ export default function ReportDetail() {
     if (!id) return;
     reportsApi.getById(id).then(res => setReport(res.data.report)).catch(() => {}).finally(() => setLoading(false));
   }, [id]);
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!confirm('이 보고서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+    try {
+      await reportsApi.delete(id);
+      alert('보고서가 삭제되었습니다.');
+      window.close();
+    } catch (err: any) {
+      alert(err.response?.data?.error || '삭제에 실패했습니다.');
+    }
+  };
 
   const handleExport = async (format: 'docx' | 'xlsx') => {
     if (!id) return;
@@ -59,6 +74,10 @@ export default function ReportDetail() {
             className="px-4 py-2 bg-blue-50 text-blue-600 text-sm rounded-lg hover:bg-blue-100">DOCX 내보내기</button>
           <button onClick={() => handleExport('xlsx')}
             className="px-4 py-2 bg-green-50 text-green-600 text-sm rounded-lg hover:bg-green-100">XLSX 내보내기</button>
+          {(isSuperAdmin || isTeamAdmin) && (
+            <button onClick={handleDelete}
+              className="px-4 py-2 bg-red-50 text-red-600 text-sm rounded-lg hover:bg-red-100">삭제</button>
+          )}
         </div>
       </div>
 

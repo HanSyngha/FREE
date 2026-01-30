@@ -80,6 +80,7 @@ export const reportsApi = {
   export: (id: string, format: 'docx' | 'xlsx') =>
     api.get(`/reports/${id}/export`, { params: { format }, responseType: 'blob' }),
   resume: () => api.post('/reports/resume'),
+  delete: (id: string) => api.delete(`/reports/${id}`),
 };
 
 // ==================== Admin ====================
