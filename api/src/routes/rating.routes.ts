@@ -54,7 +54,7 @@ ratingRoutes.post('/', authenticateToken, loadUser, async (req: AuthenticatedReq
 ratingRoutes.get('/check', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.dbUser!;
-    let shouldRate = user.requestCount > 0;
+    let shouldRate = user.requestCount > 0 && user.requestCount % 20 === 0;
 
     // 이미 이 milestone에서 rating을 제출했는지 확인
     if (shouldRate) {

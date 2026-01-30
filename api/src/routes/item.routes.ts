@@ -117,8 +117,8 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
       data: { requestCount: { increment: 1 } },
     });
 
-    // Rating 체크 (매 요청마다 - 테스트용, 운영 시 % 20으로 변경)
-    const shouldRate = updatedUser.requestCount > 0;
+    // Rating 체크 (20회마다)
+    const shouldRate = updatedUser.requestCount > 0 && updatedUser.requestCount % 20 === 0;
 
     res.json({
       success: true,
