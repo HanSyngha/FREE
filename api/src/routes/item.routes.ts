@@ -310,7 +310,13 @@ itemRoutes.post('/external', async (req, res) => {
     });
 
     console.log(`[External] ${createdItems.length} items created for ${loginid}`);
-    res.json({ success: true, items: createdItems, count: createdItems.length });
+    res.json({
+      success: true,
+      items: createdItems,
+      count: createdItems.length,
+      message: `${createdItems.length}건의 업무가 추가되었습니다. 아래 링크에서 확인하세요.`,
+      link: 'http://a2g.samsungds.net:15001',
+    });
   } catch (error) {
     console.error('External create items error:', error);
     res.status(500).json({ error: '업무 항목 생성에 실패했습니다.' });
