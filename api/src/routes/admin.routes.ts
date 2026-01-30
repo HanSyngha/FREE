@@ -225,9 +225,25 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
     }
 
     const user = await prisma.user.findUnique({ where: { loginid } });
-    if (!user) { res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}` }); return; }
+    if (!user) {
+      res.status(404).json({
+        error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
+        link: 'http://a2g.samsungds.net:15001',
+      });
+      return;
+    }
+    if (!user.teamId) {
+      res.status(400).json({
+        error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다. 먼저 웹에서 로그인하세요.`,
+        link: 'http://a2g.samsungds.net:15001',
+      });
+      return;
+    }
     if (!user.groupId || !user.partId) {
-      res.status(400).json({ error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다.` });
+      res.status(400).json({
+        error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다. 먼저 웹에서 온보딩을 완료하세요.`,
+        link: 'http://a2g.samsungds.net:15001',
+      });
       return;
     }
 
@@ -246,6 +262,10 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
 
     // 사전 검증 (DB 쓰기 전에 모든 항목 유효성 확인)
     for (const item of items) {
+      if (!item || typeof item !== 'object') {
+        res.status(400).json({ error: 'items 배열의 각 요소는 객체여야 합니다.' });
+        return;
+      }
       if (!item.title || !item.content) {
         res.status(400).json({ error: 'Each item must have title and content' });
         return;
