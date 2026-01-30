@@ -69,13 +69,13 @@ services:
       PORT: 15002
       DATABASE_URL: postgresql://${POSTGRES_USER:-free}:${POSTGRES_PASSWORD:-free_password}@free-db:5432/${POSTGRES_DB:-free}
       REDIS_URL: redis://free-redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET:-free-jwt-secret-change-in-production-2024}
       DEVELOPERS: ${DEVELOPERS:-syngha.han}
       CORS_ORIGIN: https://a2g.samsungds.net:15001,http://a2g.samsungds.net:15001
       LLM_PROXY_URL: ${LLM_PROXY_URL:-http://a2g.samsungds.net:4090/v1/chat/completions}
       LLM_SERVICE_ID: ${LLM_SERVICE_ID:-free}
       DASHBOARD_URL: ${DASHBOARD_URL:-http://a2g.samsungds.net:4090}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-free-encryption-key-change-in-production-2024}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
     volumes:
       - api-logs:/app/logs
@@ -134,7 +134,7 @@ services:
       LLM_PROXY_URL: ${LLM_PROXY_URL:-http://a2g.samsungds.net:4090/v1/chat/completions}
       LLM_SERVICE_ID: ${LLM_SERVICE_ID:-free}
       DASHBOARD_URL: ${DASHBOARD_URL:-http://a2g.samsungds.net:4090}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-free-encryption-key-change-in-production-2024}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
     networks:
       - free-network
