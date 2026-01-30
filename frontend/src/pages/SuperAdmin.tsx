@@ -10,7 +10,7 @@ export default function SuperAdmin() {
   const { isSuperAdmin } = useAuthStore();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'llm' | 'teams'>('llm');
+  const [tab, setTab] = useState<'llm' | 'teams' | 'reports'>('llm');
 
   // LLM State
   const [endpoint, setEndpoint] = useState('');
@@ -19,6 +19,11 @@ export default function SuperAdmin() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Report Trigger State
+  const [reportTeamId, setReportTeamId] = useState('');
+  const [triggering, setTriggering] = useState(false);
+  const [triggerResult, setTriggerResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Teams State
   const [teams, setTeams] = useState<any[]>([]);
@@ -94,6 +99,22 @@ export default function SuperAdmin() {
     } catch { alert('해제에 실패했습니다.'); }
   };
 
+  const handleTriggerReport = async () => {
+    if (!reportTeamId) return;
+    const team = teams.find(t => t.id === reportTeamId);
+    if (!confirm(`${team?.name || reportTeamId} 팀의 보고서를 수동 생성하시겠습니까?`)) return;
+    setTriggering(true);
+    setTriggerResult(null);
+    try {
+      const res = await adminApi.triggerReport(reportTeamId);
+      setTriggerResult({ type: 'success', message: res.data.message });
+    } catch (err: any) {
+      setTriggerResult({ type: 'error', message: err.response?.data?.error || '보고서 생성 트리거에 실패했습니다.' });
+    } finally {
+      setTriggering(false);
+    }
+  };
+
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
 
   return (
@@ -109,6 +130,10 @@ export default function SuperAdmin() {
         <button onClick={() => setTab('teams')} role="tab" aria-selected={tab === 'teams'} aria-controls="panel-teams"
           className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'teams' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           팀 관리
+        </button>
+        <button onClick={() => setTab('reports')} role="tab" aria-selected={tab === 'reports'} aria-controls="panel-reports"
+          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'reports' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          보고서 생성
         </button>
       </div>
 
@@ -266,6 +291,54 @@ export default function SuperAdmin() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Reports Tab */}
+      {tab === 'reports' && (
+        <div id="panel-reports" role="tabpanel" aria-labelledby="tab-reports" className="space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-sm font-bold text-gray-700 mb-2">수동 보고서 생성</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              매일 00:00(KST)에 자동 실행되는 보고서 생성과 동일한 작업을 수동으로 트리거합니다.
+              파트 → 그룹 → 팀 순서로 보고서가 생성됩니다.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">팀 선택</label>
+                <select value={reportTeamId} onChange={(e) => { setReportTeamId(e.target.value); setTriggerResult(null); }}
+                  className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="">팀을 선택하세요</option>
+                  {teams.map(team => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} ({team.users?.length || 0}명)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button onClick={handleTriggerReport} disabled={triggering || !reportTeamId}
+                className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors">
+                {triggering ? '생성 요청 중...' : '보고서 생성 시작'}
+              </button>
+
+              {triggerResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  triggerResult.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {triggerResult.message}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-xs text-amber-700">
+              <strong>참고:</strong> 보고서 생성은 Worker 프로세스에서 비동기로 처리됩니다.
+              생성 완료까지 팀 규모에 따라 시간이 걸릴 수 있으며, 진행 상황은 Worker 로그에서 확인할 수 있습니다.
+            </p>
+          </div>
         </div>
       )}
     </div>

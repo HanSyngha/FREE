@@ -6,6 +6,18 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, loadUser } from '../middleware/auth.js';
 import { syncModelsFromEndpoint } from '../services/llm.service.js';
 import { encrypt } from '../utils/encryption.js';
+import { Queue } from 'bullmq';
+
+function parseRedisUrl(url: string) {
+  const cleaned = url.replace('redis://', '');
+  const [host, portStr] = cleaned.split(':');
+  return { host: host || 'localhost', port: parseInt(portStr || '15004') };
+}
+
+const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:15004');
+const reportQueue = new Queue('report-generation', {
+  connection: { host: redisConfig.host, port: redisConfig.port },
+});
 
 export const adminRoutes = Router();
 
@@ -193,5 +205,34 @@ adminRoutes.delete('/team-admin/:id', authenticateToken, requireSuperAdmin, asyn
   } catch (error) {
     console.error('Remove team admin error:', error);
     res.status(500).json({ error: 'Failed to remove team admin' });
+  }
+});
+
+// POST /admin/trigger-report - 수동 보고서 생성 트리거
+adminRoutes.post('/trigger-report', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { teamId } = req.body;
+    if (!teamId) { res.status(400).json({ error: 'teamId is required' }); return; }
+
+    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
+
+    // 이미 진행 중인 작업이 있는지 확인
+    const inProgress = await prisma.reportJob.findFirst({
+      where: { teamId, status: 'IN_PROGRESS' },
+    });
+    if (inProgress) {
+      res.status(409).json({ error: '이미 해당 팀의 보고서 생성이 진행 중입니다.' });
+      return;
+    }
+
+    // BullMQ 큐에 작업 추가 (worker의 reportWorker가 처리)
+    await reportQueue.add(`manual-report-${team.id}`, { teamId });
+
+    console.log(`[Admin] Manual report triggered for team: ${team.name} by ${req.user?.loginid}`);
+    res.json({ success: true, message: `${team.name} 팀 보고서 생성이 시작되었습니다.` });
+  } catch (error) {
+    console.error('Trigger report error:', error);
+    res.status(500).json({ error: 'Failed to trigger report generation' });
   }
 });

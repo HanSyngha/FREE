@@ -95,6 +95,7 @@ export const adminApi = {
   addTeamAdmin: (userId: string, teamId: string) =>
     api.post('/admin/team-admin', { userId, teamId }),
   removeTeamAdmin: (id: string) => api.delete(`/admin/team-admin/${id}`),
+  triggerReport: (teamId: string) => api.post('/admin/trigger-report', { teamId }),
 };
 
 // ==================== Team Admin ====================
