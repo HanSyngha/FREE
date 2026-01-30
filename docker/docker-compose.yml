@@ -1,3 +1,4 @@
+name: free
 version: '3.8'
 
 # Proxy 설정 (ONCE와 동일 패턴)
