@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { spacesApi, reportsApi, announcementsApi } from '../services/api';
 
+
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function formatDateWithDay(iso: string) {
   const dateStr = iso.split('T')[0]!;
@@ -183,7 +184,10 @@ export default function TeamSpace() {
                     className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
                 </div>
               </div>
-              <p className="text-xs text-gray-400">생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</p>
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
+                <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
+              </div>
             </div>
           ))}
         </div>

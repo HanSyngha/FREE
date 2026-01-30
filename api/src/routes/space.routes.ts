@@ -37,7 +37,12 @@ spaceRoutes.get('/personal', authenticateToken, loadUser, generalLimit, async (r
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
-    res.json({ space, items, user: { id: user.id, username: user.username, loginid: user.loginid } });
+    const reports = await prisma.report.findMany({
+      where: { spaceId: space.id, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ space, items, reports, user: { id: user.id, username: user.username, loginid: user.loginid } });
   } catch (error) {
     console.error('Get personal space error:', error);
     res.status(500).json({ error: 'Failed to get personal space' });

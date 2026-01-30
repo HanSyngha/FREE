@@ -81,6 +81,7 @@ export const reportsApi = {
     api.get(`/reports/${id}/export`, { params: { format }, responseType: 'blob' }),
   resume: () => api.post('/reports/resume'),
   delete: (id: string) => api.delete(`/reports/${id}`),
+  generatePersonal: () => api.post('/reports/personal'),
 };
 
 // ==================== Admin ====================

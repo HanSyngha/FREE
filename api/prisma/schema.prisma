@@ -138,6 +138,7 @@ model Report {
 }
 
 enum ReportType {
+  PERSONAL
   PART
   GROUP
   TEAM

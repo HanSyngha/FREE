@@ -21,6 +21,80 @@ const reportQueue = new Queue('report-generation', {
   connection: { host: redisConn.host, port: redisConn.port },
 });
 
+// POST /reports/personal - 개인 보고서 수동 생성
+reportRoutes.post('/personal', authenticateToken, loadUser, generalLimit, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+
+    // 개인 Space 조회
+    const space = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
+    if (!space) { res.status(404).json({ error: 'Personal space not found' }); return; }
+
+    // 최근 7일 items 조회
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setHours(0, 0, 0, 0);
+    const periodStart = new Date(periodEnd);
+    periodStart.setDate(periodStart.getDate() - 6);
+
+    const items = await prisma.item.findMany({
+      where: {
+        userId: user.id,
+        spaceId: space.id,
+        date: { gte: periodStart, lte: periodEnd },
+      },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    if (items.length === 0) {
+      res.status(400).json({ error: '최근 7일간 등록된 업무 기록이 없습니다.' });
+      return;
+    }
+
+    // items를 날짜별 텍스트로 변환
+    let itemsData = '';
+    for (const item of items) {
+      itemsData += `- [${item.date.toISOString().split('T')[0]}] ${item.title}: ${item.content}\n`;
+    }
+
+    const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
+    const context = `당신은 ${user.username}의 7일간(${periodStr}) 개인 업무 보고서를 작성하고 있습니다.\n\n모든 업무가 빠짐없이 드러나도록 정리해 주세요. 업무를 생략하거나 축약하지 마시오.\n\n`;
+
+    // LLM 호출 (callLLM 사용)
+    const { callLLM } = await import('../services/llm.service.js');
+    const userInfo = { loginid: user.loginid, username: user.username, deptname: user.deptname };
+
+    const [byMember, byItem] = await Promise.all([
+      callLLM([
+        { role: 'system', content: `${context}다음은 ${user.username}의 업무 기록입니다.\n날짜별로 수행한 업무를 빠짐없이 정리하여 주간 보고서 형태로 작성해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
+        { role: 'user', content: itemsData },
+      ], userInfo),
+      callLLM([
+        { role: 'system', content: `${context}다음은 ${user.username}의 업무 기록입니다.\n동일하거나 유사한 업무를 항목별로 묶어 정리해 주세요. 모든 업무가 빠짐없이 포함되어야 합니다.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
+        { role: 'user', content: itemsData },
+      ], userInfo),
+    ]);
+
+    // 보고서 저장
+    const report = await prisma.report.create({
+      data: {
+        spaceId: space.id,
+        type: 'PERSONAL',
+        byMemberContent: byMember,
+        byItemContent: byItem,
+        periodStart,
+        periodEnd,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Generate personal report error:', error);
+    res.status(500).json({ error: '개인 보고서 생성에 실패했습니다.' });
+  }
+});
+
 // GET /reports/space/:spaceId - Space의 보고서 목록
 reportRoutes.get('/space/:spaceId', authenticateToken, loadUser, generalLimit, async (req: AuthenticatedRequest, res) => {
   try {
