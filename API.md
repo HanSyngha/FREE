@@ -191,6 +191,64 @@ LLM으로 그룹/파트 이름 정규화. (예: `Agent Enabler` → `AE그룹`)
 
 업무 항목 삭제. 본인 항목만 삭제 가능.
 
+### POST /items/external
+
+**인증 불필요.** loginid로 사용자를 식별하여 업무 항목을 직접 추가합니다 (LLM 파싱 없이).
+
+**요청 본문:**
+```json
+{
+  "loginid": "syngha.han",
+  "items": [
+    {
+      "title": "CI/CD 파이프라인 구축",
+      "content": "Jenkins + Docker 기반 CI/CD 파이프라인 구축 완료",
+      "date": "2026-01-27"
+    },
+    {
+      "title": "API 문서 작성",
+      "content": "FREE 서비스 API Reference 문서 작성"
+    }
+  ]
+}
+```
+
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| `loginid` | O | 대상 사용자의 loginid |
+| `items` | O | 업무 항목 배열 |
+| `items[].title` | O | 업무 제목 (최대 500자) |
+| `items[].content` | O | 업무 내용 (최대 10,000자) |
+| `items[].date` | X | 날짜 (29일 전 ~ 오늘, 기본값: 오늘) |
+
+**사용 예시 (curl):**
+```bash
+curl -X POST http://a2g.samsungds.net:15001/api/items/external \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loginid": "syngha.han",
+    "items": [
+      { "title": "업무 제목", "content": "업무 상세 내용", "date": "2026-01-30" }
+    ]
+  }'
+```
+
+**응답:**
+```json
+{
+  "success": true,
+  "items": [...],
+  "count": 1
+}
+```
+
+**에러:**
+| 상태 코드 | 설명 |
+|-----------|------|
+| 400 | loginid 누락, items 누락, 그룹/파트 미설정, 유효하지 않은 날짜 |
+| 404 | 사용자를 찾을 수 없음 (먼저 웹에서 로그인 필요) |
+| 500 | 서버 오류 |
+
 ---
 
 ## 공간 조회 (Spaces)

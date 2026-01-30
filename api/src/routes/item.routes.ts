@@ -196,6 +196,80 @@ itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
   }
 });
 
+// POST /items/external - 인증 없이 loginid로 업무 항목 직접 추가
+itemRoutes.post('/external', async (req, res) => {
+  try {
+    const { loginid, items } = req.body;
+    if (!loginid) { res.status(400).json({ error: 'loginid는 필수입니다.' }); return; }
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ error: 'items 배열은 필수입니다.' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { loginid } });
+    if (!user) { res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}` }); return; }
+    if (!user.groupId || !user.partId) {
+      res.status(400).json({ error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다. 먼저 웹에서 온보딩을 완료하세요.` });
+      return;
+    }
+
+    const personalSpace = await prisma.space.findFirst({
+      where: { type: 'PERSONAL', ownerId: user.id },
+    });
+    if (!personalSpace) {
+      res.status(500).json({ error: `사용자(${loginid})의 개인 공간이 없습니다.` });
+      return;
+    }
+
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const minDate = new Date(todayDate);
+    minDate.setDate(minDate.getDate() - 29);
+
+    const createdItems = [];
+    for (const item of items) {
+      const { title, content, date } = item;
+      if (!title || !content) {
+        res.status(400).json({ error: '각 항목에 title과 content가 필요합니다.' });
+        return;
+      }
+
+      const itemDate = date ? new Date(date) : todayDate;
+      if (itemDate > todayDate || itemDate < minDate) {
+        res.status(400).json({ error: `유효하지 않은 날짜입니다: ${date} (29일 전 ~ 오늘)` });
+        return;
+      }
+
+      const created = await prisma.item.create({
+        data: {
+          userId: user.id,
+          spaceId: personalSpace.id,
+          title: String(title).slice(0, 500),
+          content: String(content).slice(0, 10000),
+          date: itemDate,
+        },
+      });
+      createdItems.push(created);
+
+      await prisma.activityLog.create({
+        data: {
+          userId: user.id,
+          action: 'CREATE_ITEM',
+          targetType: 'ITEM',
+          targetId: created.id,
+          details: `[External] ${created.title}`,
+        },
+      });
+    }
+
+    console.log(`[External] ${createdItems.length} items created for ${loginid}`);
+    res.json({ success: true, items: createdItems, count: createdItems.length });
+  } catch (error) {
+    console.error('External create items error:', error);
+    res.status(500).json({ error: '업무 항목 생성에 실패했습니다.' });
+  }
+});
+
 // DELETE /items/:id - Item 영구 삭제
 itemRoutes.delete('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
