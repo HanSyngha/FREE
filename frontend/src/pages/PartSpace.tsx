@@ -5,6 +5,13 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { spacesApi, reportsApi } from '../services/api';
 
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+function formatDateWithDay(iso: string) {
+  const dateStr = iso.split('T')[0]!;
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${dateStr}(${DAYS[d.getDay()]})`;
+}
+
 export default function PartSpace() {
   const { partId } = useParams();
   const [data, setData] = useState<any>(null);
@@ -56,7 +63,7 @@ export default function PartSpace() {
               <div className="flex items-center justify-between mb-2">
                 <a href={`/report/${report.id}`} target="_blank" rel="noopener noreferrer"
                   className="text-sm font-medium text-primary-600 hover:underline">
-                  {report.periodStart.split('T')[0]} ~ {report.periodEnd.split('T')[0]}
+                  {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
                 </a>
                 <div className="flex gap-2">
                   <button onClick={() => handleExport(report.id, 'docx')}

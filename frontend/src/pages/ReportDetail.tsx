@@ -3,7 +3,16 @@
  */
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { reportsApi } from '../services/api';
+
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+function formatDateWithDay(iso: string) {
+  const dateStr = iso.split('T')[0]!;
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${dateStr}(${DAYS[d.getDay()]})`;
+}
 
 export default function ReportDetail() {
   const { id } = useParams();
@@ -41,7 +50,7 @@ export default function ReportDetail() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">{typeLabel} 주간 보고서</h1>
           <p className="text-sm text-gray-500">
-            {report.periodStart.split('T')[0]} ~ {report.periodEnd.split('T')[0]}
+            {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
             {' | '}생성: {new Date(report.createdAt).toLocaleString('ko-KR')}
           </p>
         </div>
@@ -58,16 +67,16 @@ export default function ReportDetail() {
         <h2 className="text-lg font-semibold text-gray-800 mb-4">
           {report.type === 'PART' ? '개인별 업무 정리' : report.type === 'GROUP' ? '파트별 업무 정리' : '그룹별 업무 정리'}
         </h2>
-        <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-          {report.byMemberContent}
+        <div className="prose prose-sm max-w-none text-gray-700">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byMemberContent}</ReactMarkdown>
         </div>
       </div>
 
       {/* 업무 항목별 정리 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">업무 항목별 정리</h2>
-        <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-          {report.byItemContent}
+        <div className="prose prose-sm max-w-none text-gray-700">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byItemContent}</ReactMarkdown>
         </div>
       </div>
     </div>
