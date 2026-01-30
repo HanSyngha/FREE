@@ -200,9 +200,15 @@ itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
 itemRoutes.post('/external', async (req, res) => {
   try {
     const { loginid, items } = req.body;
-    if (!loginid) { res.status(400).json({ error: 'loginid는 필수입니다.' }); return; }
+    if (!loginid || typeof loginid !== 'string') {
+      res.status(400).json({ error: 'loginid는 필수입니다.' }); return;
+    }
     if (!items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({ error: 'items 배열은 필수입니다.' });
+      return;
+    }
+    if (items.length > 100) {
+      res.status(400).json({ error: '한 번에 최대 100개 항목까지 입력 가능합니다.' });
       return;
     }
 
@@ -226,41 +232,54 @@ itemRoutes.post('/external', async (req, res) => {
     const minDate = new Date(todayDate);
     minDate.setDate(minDate.getDate() - 29);
 
-    const createdItems = [];
+    // 사전 검증 (DB 쓰기 전에 모든 항목 유효성 확인)
     for (const item of items) {
-      const { title, content, date } = item;
-      if (!title || !content) {
+      if (!item.title || !item.content) {
         res.status(400).json({ error: '각 항목에 title과 content가 필요합니다.' });
         return;
       }
-
-      const itemDate = date ? new Date(date) : todayDate;
-      if (itemDate > todayDate || itemDate < minDate) {
-        res.status(400).json({ error: `유효하지 않은 날짜입니다: ${date} (29일 전 ~ 오늘)` });
-        return;
+      if (item.date) {
+        const d = new Date(item.date);
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` });
+          return;
+        }
+        if (d > todayDate || d < minDate) {
+          res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date} (29일 전 ~ 오늘)` });
+          return;
+        }
       }
-
-      const created = await prisma.item.create({
-        data: {
-          userId: user.id,
-          spaceId: personalSpace.id,
-          title: String(title).slice(0, 500),
-          content: String(content).slice(0, 10000),
-          date: itemDate,
-        },
-      });
-      createdItems.push(created);
-
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'CREATE_ITEM',
-          targetType: 'ITEM',
-          targetId: created.id,
-          details: `[External] ${created.title}`,
-        },
-      });
     }
+
+    // 트랜잭션으로 전체 생성 (중간 실패 시 롤백)
+    const createdItems = await prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const item of items) {
+        const itemDate = item.date ? new Date(item.date) : todayDate;
+
+        const created = await tx.item.create({
+          data: {
+            userId: user.id,
+            spaceId: personalSpace.id,
+            title: String(item.title).slice(0, 500),
+            content: String(item.content).slice(0, 10000),
+            date: itemDate,
+          },
+        });
+        results.push(created);
+
+        await tx.activityLog.create({
+          data: {
+            userId: user.id,
+            action: 'CREATE_ITEM',
+            targetType: 'ITEM',
+            targetId: created.id,
+            details: `[External] ${created.title}`,
+          },
+        });
+      }
+      return results;
+    });
 
     console.log(`[External] ${createdItems.length} items created for ${loginid}`);
     res.json({ success: true, items: createdItems, count: createdItems.length });

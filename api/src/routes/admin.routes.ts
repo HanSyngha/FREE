@@ -212,13 +212,18 @@ adminRoutes.delete('/team-admin/:id', authenticateToken, requireSuperAdmin, asyn
 adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { loginid, items } = req.body;
-    if (!loginid) { res.status(400).json({ error: 'loginid is required' }); return; }
+    if (!loginid || typeof loginid !== 'string') {
+      res.status(400).json({ error: 'loginid is required' }); return;
+    }
     if (!items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({ error: 'items array is required' });
       return;
     }
+    if (items.length > 100) {
+      res.status(400).json({ error: '한 번에 최대 100개 항목까지 입력 가능합니다.' });
+      return;
+    }
 
-    // loginid로 사용자 조회
     const user = await prisma.user.findUnique({ where: { loginid } });
     if (!user) { res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}` }); return; }
     if (!user.groupId || !user.partId) {
@@ -226,7 +231,6 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
       return;
     }
 
-    // 개인 Space 조회
     const personalSpace = await prisma.space.findFirst({
       where: { type: 'PERSONAL', ownerId: user.id },
     });
@@ -235,48 +239,59 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
       return;
     }
 
-    // 날짜 유효성 검사 기준
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
     const minDate = new Date(todayDate);
     minDate.setDate(minDate.getDate() - 29);
 
-    const createdItems = [];
+    // 사전 검증 (DB 쓰기 전에 모든 항목 유효성 확인)
     for (const item of items) {
-      const { title, content, date } = item;
-      if (!title || !content) {
+      if (!item.title || !item.content) {
         res.status(400).json({ error: 'Each item must have title and content' });
         return;
       }
-
-      // 날짜 처리
-      const itemDate = date ? new Date(date) : todayDate;
-      if (itemDate > todayDate || itemDate < minDate) {
-        res.status(400).json({ error: `유효하지 않은 날짜입니다: ${date}` });
-        return;
+      if (item.date) {
+        const d = new Date(item.date);
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` });
+          return;
+        }
+        if (d > todayDate || d < minDate) {
+          res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date}` });
+          return;
+        }
       }
-
-      const created = await prisma.item.create({
-        data: {
-          userId: user.id,
-          spaceId: personalSpace.id,
-          title: String(title).slice(0, 500),
-          content: String(content).slice(0, 10000),
-          date: itemDate,
-        },
-      });
-      createdItems.push(created);
-
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'CREATE_ITEM',
-          targetType: 'ITEM',
-          targetId: created.id,
-          details: `[Admin] ${created.title}`,
-        },
-      });
     }
+
+    // 트랜잭션으로 전체 생성 (중간 실패 시 롤백)
+    const createdItems = await prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const item of items) {
+        const itemDate = item.date ? new Date(item.date) : todayDate;
+
+        const created = await tx.item.create({
+          data: {
+            userId: user.id,
+            spaceId: personalSpace.id,
+            title: String(item.title).slice(0, 500),
+            content: String(item.content).slice(0, 10000),
+            date: itemDate,
+          },
+        });
+        results.push(created);
+
+        await tx.activityLog.create({
+          data: {
+            userId: user.id,
+            action: 'CREATE_ITEM',
+            targetType: 'ITEM',
+            targetId: created.id,
+            details: `[Admin] ${created.title}`,
+          },
+        });
+      }
+      return results;
+    });
 
     console.log(`[Admin] ${createdItems.length} items created for ${loginid} by ${req.user?.loginid}`);
     res.json({ success: true, items: createdItems, count: createdItems.length });
