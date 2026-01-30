@@ -63,7 +63,7 @@ export default function PartSpace() {
               <div className="flex items-center justify-between mb-2">
                 <a href={`/report/${report.id}`} target="_blank" rel="noopener noreferrer"
                   className="text-sm font-medium text-primary-600 hover:underline">
-                  {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
+                  {data.part?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
                 </a>
                 <div className="flex gap-2">
                   <button onClick={() => handleExport(report.id, 'docx')}
