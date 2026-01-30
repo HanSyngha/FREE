@@ -55,7 +55,7 @@ export default function ReportDetail() {
   if (loading) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" /></div>;
   if (!report) return <div className="text-center py-12 text-gray-400">보고서를 찾을 수 없습니다</div>;
 
-  const typeLabel = report.type === 'PART' ? '파트' : report.type === 'GROUP' ? '그룹' : '팀';
+  const typeLabel = report.type === 'PERSONAL' ? '개인' : report.type === 'PART' ? '파트' : report.type === 'GROUP' ? '그룹' : '팀';
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -80,7 +80,10 @@ export default function ReportDetail() {
       {/* 개인별/파트별/그룹별 정리 */}
       <div className="bg-white rounded-xl border border-gray-200 p-8 mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-5">
-          {report.type === 'PART' ? '개인별 업무 정리' : report.type === 'GROUP' ? '파트별 업무 정리' : '그룹별 업무 정리'}
+          {report.type === 'PERSONAL' ? '날짜별 업무 취합 보고서'
+            : report.type === 'PART' ? '파트원별 취합 보고서'
+            : report.type === 'GROUP' ? '파트별 취합 보고서'
+            : '그룹별 취합 보고서'}
         </h2>
         <div className="report-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{report.byMemberContent}</ReactMarkdown>
@@ -89,7 +92,12 @@ export default function ReportDetail() {
 
       {/* 업무 항목별 정리 */}
       <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <h2 className="text-lg font-semibold text-gray-800 mb-5">업무 항목별 정리</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-5">
+          {report.type === 'PERSONAL' ? '업무 항목별 취합 보고서'
+            : report.type === 'PART' ? '파트 업무 항목별 취합 보고서'
+            : report.type === 'GROUP' ? '그룹 업무 항목별 취합 보고서'
+            : '팀 업무 항목별 취합 보고서'}
+        </h2>
         <div className="report-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{report.byItemContent}</ReactMarkdown>
         </div>
