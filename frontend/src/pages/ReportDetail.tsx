@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { reportsApi } from '../services/api';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -82,7 +83,7 @@ export default function ReportDetail() {
           {report.type === 'PART' ? '개인별 업무 정리' : report.type === 'GROUP' ? '파트별 업무 정리' : '그룹별 업무 정리'}
         </h2>
         <div className="report-markdown">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byMemberContent}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{report.byMemberContent}</ReactMarkdown>
         </div>
       </div>
 
@@ -90,7 +91,7 @@ export default function ReportDetail() {
       <div className="bg-white rounded-xl border border-gray-200 p-8">
         <h2 className="text-lg font-semibold text-gray-800 mb-5">업무 항목별 정리</h2>
         <div className="report-markdown">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byItemContent}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{report.byItemContent}</ReactMarkdown>
         </div>
       </div>
     </div>
