@@ -166,7 +166,10 @@ export default function Login() {
           </button>
 
           <p className="mt-6 text-xs text-gray-400">
-            &copy; 2026 FREE. Developed by syngha.han
+            syngha.han 개인 프로젝트 &middot; 버그/문의:{' '}
+            <a href="http://a2g.samsungds.net:4090/feedback" target="_blank" rel="noopener noreferrer"
+              className="underline hover:text-gray-600">Feedback</a>
+            {' '}또는 syngha.han
           </p>
         </div>
       </main>
