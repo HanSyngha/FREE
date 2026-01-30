@@ -45,7 +45,7 @@ export default function ReportDetail() {
   const typeLabel = report.type === 'PART' ? '파트' : report.type === 'GROUP' ? '그룹' : '팀';
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{typeLabel} 주간 보고서</h1>
@@ -63,19 +63,19 @@ export default function ReportDetail() {
       </div>
 
       {/* 개인별/파트별/그룹별 정리 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-5">
           {report.type === 'PART' ? '개인별 업무 정리' : report.type === 'GROUP' ? '파트별 업무 정리' : '그룹별 업무 정리'}
         </h2>
-        <div className="prose prose-sm max-w-none text-gray-700">
+        <div className="report-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byMemberContent}</ReactMarkdown>
         </div>
       </div>
 
       {/* 업무 항목별 정리 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">업무 항목별 정리</h2>
-        <div className="prose prose-sm max-w-none text-gray-700">
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h2 className="text-lg font-semibold text-gray-800 mb-5">업무 항목별 정리</h2>
+        <div className="report-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.byItemContent}</ReactMarkdown>
         </div>
       </div>
