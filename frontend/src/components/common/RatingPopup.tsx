@@ -1,6 +1,6 @@
 /**
  * Rating Popup - ONCE 패턴 참조
- * 개인별 LLM 요청 20회마다 표시
+ * X 버튼으로만 닫을 수 있음
  */
 import { useState, useEffect, useCallback } from 'react';
 import { ratingApi } from '../../services/api';
@@ -27,16 +27,6 @@ export default function RatingPopup({ isOpen, onClose }: RatingPopupProps) {
     }
   }, [isOpen]);
 
-  // Escape 키로 닫기
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   const handleSubmit = useCallback(async () => {
     if (selectedRating === 0 || submitting) return;
     setSubmitting(true);
@@ -55,11 +45,22 @@ export default function RatingPopup({ isOpen, onClose }: RatingPopupProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="rating-dialog-title">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      {/* Backdrop - 클릭해도 닫히지 않음 */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
 
       {/* Dialog */}
       <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
+        {/* X 버튼 */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors z-10"
+          aria-label="닫기"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
         {submitted ? (
           <div className="px-6 py-10 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
@@ -108,15 +109,11 @@ export default function RatingPopup({ isOpen, onClose }: RatingPopupProps) {
             </div>
 
             {/* Actions */}
-            <div className="px-6 pb-6 flex gap-3">
-              <button onClick={onClose}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-100">
-                건너뛰기
-              </button>
+            <div className="px-6 pb-6">
               <button onClick={handleSubmit}
                 disabled={selectedRating === 0 || submitting}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40">
-                제출
+                className="w-full px-4 py-2.5 rounded-xl text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40">
+                {submitting ? '제출 중...' : '제출'}
               </button>
             </div>
           </>
