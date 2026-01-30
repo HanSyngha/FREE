@@ -115,6 +115,7 @@ export default function Login() {
           <div className="mb-8">
             <h1 className="text-5xl font-extrabold text-primary-600 mb-2">FREE</h1>
             <p className="text-lg text-gray-500">Fast Report & Easy Evidence</p>
+            <p className="text-sm text-primary-400 mt-1 font-medium">주간보고에서 해방!</p>
           </div>
 
           {/* Description */}
