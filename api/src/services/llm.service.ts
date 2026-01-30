@@ -293,7 +293,7 @@ export async function generatePartReport(
   }
 
   const ctxLine = context
-    ? `당신은 ${partName} 파트의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n파트 구성원: ${context.memberNames}\n\n`
+    ? `당신은 ${partName} 파트의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n파트 구성원: ${context.memberNames}\n\n절대로 파트원간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`
     : '';
 
   const byMember = await callLLM([
@@ -332,7 +332,7 @@ export async function generateGroupReport(
   }
 
   const ctxLine = context
-    ? `당신은 ${groupName} 그룹의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n그룹 소속 파트: ${context.partNames}\n\n`
+    ? `당신은 ${groupName} 그룹의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n그룹 소속 파트: ${context.partNames}\n\n절대로 파트간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`
     : '';
 
   const byMember = await callLLM([
@@ -371,7 +371,7 @@ export async function generateTeamReport(
   }
 
   const ctxLine = context
-    ? `당신은 ${teamName} 팀의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n팀 소속 그룹: ${context.groupNames}\n\n`
+    ? `당신은 ${teamName} 팀의 7일간(${context.periodStr}) 주간 보고서를 작성하고 있습니다.\n팀 소속 그룹: ${context.groupNames}\n\n절대로 그룹간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`
     : '';
 
   const byMember = await callLLM([

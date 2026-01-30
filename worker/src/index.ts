@@ -274,7 +274,7 @@ async function generatePartReportWorker(
   } else {
     const memberNames = users.map(u => u.username).join(', ');
     const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
-    const partContext = `당신은 ${part.name} 파트의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n파트 구성원: ${memberNames}\n\n`;
+    const partContext = `당신은 ${part.name} 파트의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n파트 구성원: ${memberNames}\n\n절대로 파트원간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([
       callWithRetry([
@@ -347,7 +347,7 @@ async function generateGroupReportWorker(
   } else {
     const partNames = group.parts.map(p => p.name).join(', ');
     const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
-    const groupContext = `당신은 ${group.name} 그룹의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n그룹 소속 파트: ${partNames}\n\n`;
+    const groupContext = `당신은 ${group.name} 그룹의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n그룹 소속 파트: ${partNames}\n\n절대로 파트간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([
       callWithRetry([
@@ -415,7 +415,7 @@ async function generateTeamReportWorker(
   } else {
     const groupNames = team.groups.map(g => g.name).join(', ');
     const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
-    const teamContext = `당신은 ${team.name} 팀의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n팀 소속 그룹: ${groupNames}\n\n`;
+    const teamContext = `당신은 ${team.name} 팀의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n팀 소속 그룹: ${groupNames}\n\n절대로 그룹간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([
       callWithRetry([
