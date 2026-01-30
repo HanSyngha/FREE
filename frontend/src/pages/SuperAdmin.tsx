@@ -27,6 +27,7 @@ export default function SuperAdmin() {
 
   // Teams State
   const [teams, setTeams] = useState<any[]>([]);
+  const [filterBU, setFilterBU] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [selectedPartId, setSelectedPartId] = useState('');
@@ -115,6 +116,8 @@ export default function SuperAdmin() {
     }
   };
 
+  const businessUnits = [...new Set(teams.map(t => t.businessUnit).filter(Boolean))].sort();
+  const filteredTeams = filterBU ? teams.filter(t => t.businessUnit === filterBU) : teams;
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
 
   return (
@@ -204,16 +207,23 @@ export default function SuperAdmin() {
         <div id="panel-teams" role="tabpanel" aria-labelledby="tab-teams" className="space-y-6">
           {/* 팀 목록 */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-sm font-bold text-gray-700 mb-4">전체 팀 목록</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-bold text-gray-700">전체 팀 목록</h2>
+              <select value={filterBU} onChange={(e) => { setFilterBU(e.target.value); setSelectedTeamId(''); }}
+                className="px-3 py-1.5 border rounded-lg text-sm">
+                <option value="">전체 사업부</option>
+                {businessUnits.map(bu => <option key={bu} value={bu}>{bu}</option>)}
+              </select>
+            </div>
             <div className="space-y-3">
-              {teams.map(team => (
+              {filteredTeams.map(team => (
                 <div key={team.id} className={`p-4 rounded-lg border cursor-pointer transition-all
                   ${selectedTeamId === team.id ? 'border-primary-300 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
                   onClick={() => setSelectedTeamId(team.id)}>
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-sm font-medium">{team.name}</span>
-                      <span className="text-xs text-gray-400 ml-2">{team.businessUnit}</span>
+                      <span className="text-xs text-gray-400 ml-2">({team.businessUnit})</span>
                     </div>
                     <span className="text-xs text-gray-500">{team.users?.length || 0}명</span>
                   </div>
@@ -238,7 +248,7 @@ export default function SuperAdmin() {
           {selectedTeam && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-bold text-gray-700 mb-4">
-                {selectedTeam.name} - Team Admin 관리
+                {selectedTeam.name} <span className="text-gray-400 font-normal">({selectedTeam.businessUnit})</span> - Team Admin 관리
               </h2>
 
               {/* 그룹/파트 드롭다운 필터 */}
@@ -305,17 +315,27 @@ export default function SuperAdmin() {
             </p>
 
             <div className="space-y-4">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">팀 선택</label>
-                <select value={reportTeamId} onChange={(e) => { setReportTeamId(e.target.value); setTriggerResult(null); }}
-                  className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="">팀을 선택하세요</option>
-                  {teams.map(team => (
-                    <option key={team.id} value={team.id}>
-                      {team.name} ({team.users?.length || 0}명)
-                    </option>
-                  ))}
-                </select>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 block mb-1">사업부</label>
+                  <select value={filterBU} onChange={(e) => { setFilterBU(e.target.value); setReportTeamId(''); setTriggerResult(null); }}
+                    className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="">전체 사업부</option>
+                    {businessUnits.map(bu => <option key={bu} value={bu}>{bu}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 block mb-1">팀 선택</label>
+                  <select value={reportTeamId} onChange={(e) => { setReportTeamId(e.target.value); setTriggerResult(null); }}
+                    className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="">팀을 선택하세요</option>
+                    {filteredTeams.map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name} ({team.businessUnit}) - {team.users?.length || 0}명
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <button onClick={handleTriggerReport} disabled={triggering || !reportTeamId}

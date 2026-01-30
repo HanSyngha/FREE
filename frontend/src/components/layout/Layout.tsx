@@ -91,6 +91,9 @@ export default function Layout() {
                     }`
                   }>
                     {sidebarData.team.name}
+                    {sidebarData.team.businessUnit && (
+                      <span className="text-xs text-gray-400 ml-1">({sidebarData.team.businessUnit})</span>
+                    )}
                   </NavLink>
 
                   {/* 그룹 → 파트 */}
