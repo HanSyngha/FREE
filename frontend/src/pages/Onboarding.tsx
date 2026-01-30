@@ -1,7 +1,8 @@
 /**
  * Onboarding Page - 최초 로그인 그룹/파트 선택
+ * Step 1: 그룹 선택/생성 → Step 2: 파트 선택/생성 → 완료
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { onboardingApi, authApi } from '../services/api';
@@ -9,6 +10,10 @@ import { onboardingApi, authApi } from '../services/api';
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user, setAuth } = useAuthStore();
+
+  // Step: 'group' → 'part' → submit
+  const [step, setStep] = useState<'group' | 'part'>('group');
+
   const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [parts, setParts] = useState<Array<{ id: string; name: string }>>([]);
 
@@ -19,11 +24,13 @@ export default function Onboarding() {
   const [isNewGroup, setIsNewGroup] = useState(false);
   const [isNewPart, setIsNewPart] = useState(false);
 
+  // 정규화 상태
   const [normalizedName, setNormalizedName] = useState('');
   const [normalizeTarget, setNormalizeTarget] = useState<'group' | 'part' | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [groupNormalized, setGroupNormalized] = useState(false);
   const [partNormalized, setPartNormalized] = useState(false);
+  const programmaticSet = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,50 +47,75 @@ export default function Onboarding() {
     }
   }, [selectedGroupId]);
 
+  // 사용자가 직접 타이핑할 때만 정규화 상태 리셋
+  const handleGroupNameChange = (val: string) => {
+    setNewGroupName(val);
+    setGroupNormalized(false);
+  };
+
+  const handlePartNameChange = (val: string) => {
+    setNewPartName(val);
+    setPartNormalized(false);
+  };
+
   const handleNormalize = async (name: string, target: 'group' | 'part') => {
     try {
+      setLoading(true);
       const res = await onboardingApi.normalizeName(name);
       setNormalizedName(res.data.normalized);
       setNormalizeTarget(target);
       setShowConfirm(true);
     } catch {
       setError('이름 정규화에 실패했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 신규 이름 직접 변경 시 정규화 상태 리셋
-  useEffect(() => { setGroupNormalized(false); }, [newGroupName]);
-  useEffect(() => { setPartNormalized(false); }, [newPartName]);
-
   const confirmNormalize = () => {
+    programmaticSet.current = true;
     if (normalizeTarget === 'group') {
-      setGroupNormalized(true);
       setNewGroupName(normalizedName);
+      setGroupNormalized(true);
     } else {
-      setPartNormalized(true);
       setNewPartName(normalizedName);
+      setPartNormalized(true);
     }
     setShowConfirm(false);
   };
 
-  const handleSubmit = async () => {
-    setLoading(true);
+  // Step 1: 그룹 확정
+  const handleGroupNext = async () => {
     setError('');
 
-    // 신규 그룹 이름 정규화 확인 (아직 정규화 안 됐으면)
     if (isNewGroup && newGroupName && !groupNormalized) {
       await handleNormalize(newGroupName, 'group');
-      setLoading(false);
       return;
     }
 
-    // 신규 파트 이름 정규화 확인 (아직 정규화 안 됐으면)
+    if (!selectedGroupId && !newGroupName) {
+      setError('그룹을 선택하거나 새로 입력해 주세요.');
+      return;
+    }
+
+    setStep('part');
+  };
+
+  // Step 2: 최종 제출
+  const handleSubmit = async () => {
+    setError('');
+
     if (isNewPart && newPartName && !partNormalized) {
       await handleNormalize(newPartName, 'part');
-      setLoading(false);
       return;
     }
 
+    if (!selectedPartId && !newPartName) {
+      setError('파트를 선택하거나 새로 입력해 주세요.');
+      return;
+    }
+
+    setLoading(true);
     try {
       const data: any = {};
       if (isNewGroup) {
@@ -99,7 +131,6 @@ export default function Onboarding() {
 
       await onboardingApi.setup(data);
 
-      // Refresh user data
       const meRes = await authApi.me();
       setAuth({
         user: meRes.data.user,
@@ -117,6 +148,9 @@ export default function Onboarding() {
     }
   };
 
+  const groupResolved = isNewGroup ? newGroupName : selectedGroupId;
+  const partResolved = isNewPart ? newPartName : selectedPartId;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
@@ -124,6 +158,12 @@ export default function Onboarding() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">조직 설정</h1>
           <p className="text-sm text-gray-500">소속 그룹과 파트를 선택해 주세요</p>
           <p className="text-xs text-gray-400 mt-1">{user?.username} ({user?.loginid})</p>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-6">
+          <div className={`flex-1 h-1.5 rounded-full transition-colors ${step === 'group' ? 'bg-primary-500' : 'bg-primary-500'}`} />
+          <div className={`flex-1 h-1.5 rounded-full transition-colors ${step === 'part' ? 'bg-primary-500' : 'bg-gray-200'}`} />
         </div>
 
         {error && (
@@ -148,79 +188,107 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* 그룹 선택 */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">그룹</label>
-          {!isNewGroup ? (
-            <div>
-              <select
-                value={selectedGroupId}
-                onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedPartId(''); }}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="">그룹을 선택하세요</option>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-              <button onClick={() => setIsNewGroup(true)} className="mt-1 text-xs text-primary-600 hover:underline">
-                + 새 그룹 등록
-              </button>
-            </div>
-          ) : (
-            <div>
-              <input
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="새 그룹 이름을 입력하세요"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-              />
-              <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); }} className="mt-1 text-xs text-gray-500 hover:underline">
-                기존 그룹에서 선택
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Step 1: 그룹 */}
+        {step === 'group' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">그룹 선택</label>
+            {!isNewGroup ? (
+              <div>
+                <select
+                  value={selectedGroupId}
+                  onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedPartId(''); }}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">그룹을 선택하세요</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+                <button onClick={() => setIsNewGroup(true)} className="mt-1 text-xs text-primary-600 hover:underline">
+                  + 새 그룹 등록
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  value={newGroupName}
+                  onChange={(e) => handleGroupNameChange(e.target.value)}
+                  placeholder="예: Agent Enabler → AE그룹"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="mt-1 text-xs text-gray-400">긴 영문명은 축약하세요 (Agent Enabler → AE그룹)</p>
+                <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); setGroupNormalized(false); }}
+                  className="mt-1 text-xs text-gray-500 hover:underline">
+                  기존 그룹에서 선택
+                </button>
+              </div>
+            )}
 
-        {/* 파트 선택 */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">파트</label>
-          {!isNewPart ? (
-            <div>
-              <select
-                value={selectedPartId}
-                onChange={(e) => setSelectedPartId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                disabled={!selectedGroupId && !isNewGroup}
-              >
-                <option value="">파트를 선택하세요</option>
-                {parts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <button onClick={() => setIsNewPart(true)} className="mt-1 text-xs text-primary-600 hover:underline">
-                + 새 파트 등록
-              </button>
-            </div>
-          ) : (
-            <div>
-              <input
-                value={newPartName}
-                onChange={(e) => setNewPartName(e.target.value)}
-                placeholder="새 파트 이름을 입력하세요"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-              />
-              <button onClick={() => { setIsNewPart(false); setNewPartName(''); }} className="mt-1 text-xs text-gray-500 hover:underline">
-                기존 파트에서 선택
-              </button>
-            </div>
-          )}
-        </div>
+            <button
+              onClick={handleGroupNext}
+              disabled={loading || !groupResolved}
+              className="w-full mt-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? '처리 중...' : '다음'}
+            </button>
+          </div>
+        )}
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading || ((!selectedGroupId && !newGroupName) || (!selectedPartId && !newPartName))}
-          className="w-full py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700
-                     disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-        >
-          {loading ? '설정 중...' : '설정 완료'}
-        </button>
+        {/* Step 2: 파트 */}
+        {step === 'part' && (
+          <div>
+            {/* 선택된 그룹 표시 */}
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+              <div>
+                <span className="text-xs text-gray-500">그룹</span>
+                <p className="text-sm font-medium text-gray-900">
+                  {isNewGroup ? newGroupName : groups.find(g => g.id === selectedGroupId)?.name}
+                </p>
+              </div>
+              <button onClick={() => setStep('group')} className="text-xs text-primary-600 hover:underline">변경</button>
+            </div>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">파트 선택</label>
+            {!isNewPart ? (
+              <div>
+                <select
+                  value={selectedPartId}
+                  onChange={(e) => setSelectedPartId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  disabled={isNewGroup}
+                >
+                  <option value="">{isNewGroup ? '새 그룹에는 새 파트를 등록하세요' : '파트를 선택하세요'}</option>
+                  {parts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <button onClick={() => setIsNewPart(true)} className="mt-1 text-xs text-primary-600 hover:underline">
+                  + 새 파트 등록
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  value={newPartName}
+                  onChange={(e) => handlePartNameChange(e.target.value)}
+                  placeholder="예: Agent Enabler → AE파트"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="mt-1 text-xs text-gray-400">긴 영문명은 축약하세요 (Agent Enabler → AE파트)</p>
+                <button onClick={() => { setIsNewPart(false); setNewPartName(''); setPartNormalized(false); }}
+                  className="mt-1 text-xs text-gray-500 hover:underline">
+                  기존 파트에서 선택
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={loading || !partResolved}
+              className="w-full mt-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? '설정 중...' : '설정 완료'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
