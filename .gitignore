@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+api/prisma/*.db
+api/prisma/migrations/
+frontend/.vite/
+build_logs/
+*.tsbuildinfo
+package-lock.json

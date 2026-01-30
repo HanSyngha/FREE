@@ -1,0 +1,24 @@
+{
+  "name": "free",
+  "version": "1.0.0",
+  "description": "FREE - Fast Report & Easy Evidence",
+  "private": true,
+  "workspaces": [
+    "api",
+    "frontend",
+    "worker"
+  ],
+  "scripts": {
+    "dev:api": "cd api && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:worker": "cd worker && npm run dev",
+    "build:api": "cd api && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build:worker": "cd worker && npm run build",
+    "db:generate": "cd api && npx prisma generate",
+    "db:migrate": "cd api && npx prisma migrate deploy",
+    "db:push": "cd api && npx prisma db push",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f docker/docker-compose.yml down"
+  }
+}

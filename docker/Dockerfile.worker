@@ -1,0 +1,75 @@
+# Build stage
+FROM node:24-alpine AS builder
+
+# Alpine apk를 http로 변경 (SSL 문제 우회)
+RUN sed -i 's/https/http/' /etc/apk/repositories
+
+# Prisma용 OpenSSL 설치
+RUN apk add --no-cache openssl
+
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+WORKDIR /app
+
+RUN npm config set strict-ssl false
+
+# Copy package files
+COPY worker/package*.json ./
+
+# Install ALL dependencies (including devDependencies for build)
+RUN npm install --include=dev
+
+# Copy prisma schema (from api directory)
+COPY api/prisma ./prisma/
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy source files
+COPY worker/src ./src/
+COPY worker/tsconfig.json ./
+
+# Build TypeScript
+RUN npx tsc
+
+# Production stage
+FROM node:24-alpine AS production
+
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+# Alpine apk를 http로 변경 + Prisma용 OpenSSL 설치
+RUN sed -i 's/https/http/' /etc/apk/repositories && \
+    apk add --no-cache openssl
+
+WORKDIR /app
+
+# Copy node_modules from builder
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy Prisma schema
+COPY --from=builder /app/prisma ./prisma
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+
+# Copy package.json for reference
+COPY worker/package*.json ./
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+# Expose port
+EXPOSE 15005
+
+# Environment variables
+ENV NODE_ENV=production
+
+# Health check (worker는 HTTP endpoint 없으므로 프로세스 확인)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD pgrep -f "node dist/index.js" || exit 1
+
+CMD ["node", "dist/index.js"]

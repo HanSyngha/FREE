@@ -1,0 +1,142 @@
+/**
+ * API Service - ONCE와 동일한 패턴
+ */
+import axios from 'axios';
+import { useAuthStore } from '../stores/authStore';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || 'http://a2g.samsungds.net:4090';
+
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Request interceptor
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('free_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response interceptor - 401 → 자동 로그아웃 (토큰 만료/무효)
+// 403은 권한 부족이므로 로그아웃하지 않음 (Super Admin 접근 시도 등)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url = error.config?.url || '';
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/me');
+    if (error.response?.status === 401 && !isAuthEndpoint) {
+      localStorage.removeItem('free_token');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ==================== Auth ====================
+export const authApi = {
+  login: (ssoToken: string) =>
+    api.post('/auth/login', {}, { headers: { Authorization: `Bearer ${ssoToken}` } }),
+  me: () => api.get('/auth/me'),
+  refresh: () => api.post('/auth/refresh'),
+  logout: () => api.post('/auth/logout'),
+};
+
+// ==================== Onboarding ====================
+export const onboardingApi = {
+  getGroups: () => api.get('/onboarding/groups'),
+  getParts: (groupId: string) => api.get('/onboarding/parts', { params: { groupId } }),
+  setup: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
+    api.post('/onboarding/setup', data),
+  normalizeName: (name: string) => api.post('/onboarding/normalize-name', { name }),
+};
+
+// ==================== Items ====================
+export const itemsApi = {
+  create: (text: string, date?: string) => api.post('/items', { text, date }),
+  update: (id: string, data: { title?: string; content?: string; link?: string; date?: string }) =>
+    api.put(`/items/${id}`, data),
+  delete: (id: string) => api.delete(`/items/${id}`),
+};
+
+// ==================== Spaces ====================
+export const spacesApi = {
+  getPersonal: () => api.get('/spaces/personal'),
+  getPersonalUser: (userId: string) => api.get(`/spaces/personal/${userId}`),
+  getPart: (partId: string) => api.get(`/spaces/part/${partId}`),
+  getGroup: (groupId: string) => api.get(`/spaces/group/${groupId}`),
+  getTeam: () => api.get('/spaces/team'),
+};
+
+// ==================== Reports ====================
+export const reportsApi = {
+  getBySpace: (spaceId: string) => api.get(`/reports/space/${spaceId}`),
+  getById: (id: string) => api.get(`/reports/${id}`),
+  export: (id: string, format: 'docx' | 'xlsx') =>
+    api.get(`/reports/${id}/export`, { params: { format }, responseType: 'blob' }),
+  resume: () => api.post('/reports/resume'),
+};
+
+// ==================== Admin ====================
+export const adminApi = {
+  setEndpoint: (endpoint: string, apiKey?: string) =>
+    api.post('/admin/llm/endpoint', { endpoint, apiKey }),
+  syncModels: (endpoint?: string, apiKey?: string) =>
+    api.post('/admin/llm/sync', { endpoint, apiKey }),
+  getModels: () => api.get('/admin/llm/models'),
+  activateModel: (modelId: string, data: { modelName?: string; endpoint?: string; apiKey?: string }) =>
+    api.put(`/admin/llm/activate/${modelId}`, data),
+  getTeams: () => api.get('/admin/teams'),
+  addTeamAdmin: (userId: string, teamId: string) =>
+    api.post('/admin/team-admin', { userId, teamId }),
+  removeTeamAdmin: (id: string) => api.delete(`/admin/team-admin/${id}`),
+};
+
+// ==================== Team Admin ====================
+export const teamAdminApi = {
+  getUsers: (params?: { groupId?: string; partId?: string }) =>
+    api.get('/team-admin/users', { params }),
+  getReportLogs: () => api.get('/team-admin/report-logs'),
+};
+
+// ==================== Rating ====================
+export const ratingApi = {
+  submit: (score: number) => api.post('/ratings', { score }),
+  check: () => api.get('/ratings/check'),
+  // Dashboard rating (ONCE 패턴)
+  submitToDashboard: (modelName: string, rating: number) => {
+    const user = useAuthStore.getState().user;
+    return axios.post(`${DASHBOARD_URL}/api/rating`, {
+      modelName, rating, serviceId: 'free',
+    }, {
+      headers: {
+        'X-Service-Id': 'free',
+        ...(user && {
+          'X-User-Id': user.loginid,
+          'X-User-Name': encodeURIComponent(user.username),
+          'X-User-Dept': encodeURIComponent(user.deptname),
+        }),
+      },
+    });
+  },
+};
+
+// ==================== Profile ====================
+export const profileApi = {
+  get: () => api.get('/profile'),
+  updateOrganization: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
+    api.put('/profile/organization', data),
+  getActivityLog: () => api.get('/profile/activity-log'),
+};
+
+// ==================== Announcements ====================
+export const announcementsApi = {
+  get: () => api.get('/announcements/team'),
+  create: (title: string, content: string) => api.post('/announcements/team', { title, content }),
+  delete: () => api.delete('/announcements/team'),
+};

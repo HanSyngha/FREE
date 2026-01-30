@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  loginid      String    @unique
+  username     String
+  deptname     String
+  businessUnit String
+  teamId       String?
+  groupId      String?
+  partId       String?
+  requestCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  lastActive   DateTime  @default(now())
+
+  team         Team?     @relation(fields: [teamId], references: [id])
+  group        Group?    @relation(fields: [groupId], references: [id])
+  part         Part?     @relation(fields: [partId], references: [id])
+
+  items        Item[]
+  ratings      LLMRating[]
+  teamAdmins   TeamAdmin[]
+  activityLogs ActivityLog[]
+  announcements Announcement[]
+
+  @@map("users")
+}
+
+model Team {
+  id           String    @id @default(uuid())
+  name         String
+  businessUnit String
+  createdAt    DateTime  @default(now())
+
+  users        User[]
+  groups       Group[]
+  spaces       Space[]
+  teamAdmins   TeamAdmin[]
+  reportJobs   ReportJob[]
+  reportLogs   ReportLog[]
+  announcements Announcement[]
+
+  @@unique([name, businessUnit])
+  @@map("teams")
+}
+
+model Group {
+  id        String   @id @default(uuid())
+  name      String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parts     Part[]
+  users     User[]
+
+  @@unique([name, teamId])
+  @@map("groups")
+}
+
+model Part {
+  id        String   @id @default(uuid())
+  name      String
+  groupId   String
+  createdAt DateTime @default(now())
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  users     User[]
+
+  @@unique([name, groupId])
+  @@map("parts")
+}
+
+model Space {
+  id        String    @id @default(uuid())
+  type      SpaceType
+  ownerId   String
+  teamId    String?
+  createdAt DateTime  @default(now())
+
+  team      Team?     @relation(fields: [teamId], references: [id])
+
+  items     Item[]
+  reports   Report[]
+
+  @@index([type, ownerId])
+  @@map("spaces")
+}
+
+enum SpaceType {
+  PERSONAL
+  PART
+  GROUP
+  TEAM
+}
+
+model Item {
+  id        String   @id @default(uuid())
+  userId    String
+  spaceId   String
+  title     String
+  content   String
+  link      String?
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  space     Space    @relation(fields: [spaceId], references: [id])
+
+  @@index([userId, date])
+  @@index([spaceId, date])
+  @@map("items")
+}
+
+model Report {
+  id              String     @id @default(uuid())
+  spaceId         String
+  type            ReportType
+  byMemberContent String
+  byItemContent   String
+  periodStart     DateTime   @db.Date
+  periodEnd       DateTime   @db.Date
+  createdAt       DateTime   @default(now())
+  expiresAt       DateTime
+
+  space           Space      @relation(fields: [spaceId], references: [id])
+
+  @@index([spaceId, createdAt])
+  @@map("reports")
+}
+
+enum ReportType {
+  PART
+  GROUP
+  TEAM
+}
+
+model ReportJob {
+  id         String        @id @default(uuid())
+  teamId     String
+  status     ReportJobStatus
+  failedAt   String?
+  retryCount Int           @default(0)
+  lastError  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  team       Team          @relation(fields: [teamId], references: [id])
+
+  @@index([teamId, status])
+  @@map("report_jobs")
+}
+
+enum ReportJobStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model LLMConfig {
+  id         String   @id @default(uuid())
+  endpoint   String
+  apiKey     String
+  modelId    String
+  modelName  String
+  isActive   Boolean  @default(false)
+  lastSyncAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@map("llm_configs")
+}
+
+model LLMRating {
+  id           String   @id @default(uuid())
+  userId       String
+  score        Int
+  requestCount Int
+  modelId      String
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("llm_ratings")
+}
+
+model TeamAdmin {
+  id        String   @id @default(uuid())
+  userId    String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+  @@map("team_admins")
+}
+
+model ReportLog {
+  id           String          @id @default(uuid())
+  teamId       String
+  reportType   ReportType
+  targetName   String
+  status       ReportLogStatus
+  errorMessage String?
+  createdAt    DateTime        @default(now())
+
+  team         Team            @relation(fields: [teamId], references: [id])
+
+  @@index([teamId, createdAt])
+  @@map("report_logs")
+}
+
+enum ReportLogStatus {
+  SUCCESS
+  FAILED
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  teamId    String   @unique
+  authorId  String
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team      Team     @relation(fields: [teamId], references: [id])
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@map("announcements")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  targetType String?
+  targetId   String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}

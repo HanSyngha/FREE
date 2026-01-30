@@ -1,0 +1,226 @@
+/**
+ * Item Routes - 업무 기록 CRUD
+ */
+import { Router } from 'express';
+import { prisma } from '../index.js';
+import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
+import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
+import { parseItemsWithLLM } from '../services/llm.service.js';
+
+export const itemRoutes = Router();
+
+// POST /items - 텍스트 제출 → LLM item 분리 → 저장
+itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+    if (!user.groupId || !user.partId) {
+      res.status(400).json({ error: '그룹/파트 설정이 필요합니다.' });
+      return;
+    }
+
+    const { text, date } = req.body;
+    if (!text || typeof text !== 'string') {
+      res.status(400).json({ error: '텍스트를 입력해 주세요.' });
+      return;
+    }
+    if (text.length > 50000) {
+      res.status(400).json({ error: '최대 50,000자까지 입력 가능합니다.' });
+      return;
+    }
+
+    // 개인 Space 조회
+    const personalSpace = await prisma.space.findFirst({
+      where: { type: 'PERSONAL', ownerId: user.id },
+    });
+    if (!personalSpace) {
+      res.status(500).json({ error: 'Personal space not found' });
+      return;
+    }
+
+    // User context
+    const team = await prisma.team.findUnique({ where: { id: user.teamId! } });
+    const group = await prisma.group.findUnique({ where: { id: user.groupId } });
+    const part = await prisma.part.findUnique({ where: { id: user.partId } });
+
+    const today = new Date().toISOString().split('T')[0]!;
+
+    // 날짜 유효성 검사 (29일 전 ~ 오늘, 미래 불가)
+    if (date) {
+      const inputDate = new Date(date);
+      const todayDate = new Date();
+      todayDate.setHours(0, 0, 0, 0);
+      const minDate = new Date(todayDate);
+      minDate.setDate(minDate.getDate() - 29);
+      if (inputDate > todayDate || inputDate < minDate) {
+        res.status(400).json({ error: '날짜는 29일 전부터 오늘까지만 선택 가능합니다.' });
+        return;
+      }
+    }
+
+    // LLM으로 item 분리
+    // today는 항상 실제 오늘 날짜 (날짜 검증용), defaultDate는 사용자가 선택한 날짜 (fallback용)
+    const parsedItems = await parseItemsWithLLM(
+      text,
+      {
+        username: user.username,
+        businessUnit: user.businessUnit,
+        teamName: team?.name || '',
+        groupName: group?.name || '',
+        partName: part?.name || '',
+        today,
+        defaultDate: date || today,
+      },
+      {
+        loginid: user.loginid,
+        username: user.username,
+        deptname: user.deptname,
+      }
+    );
+
+    // LLM이 빈 결과를 반환한 경우
+    if (!parsedItems || parsedItems.length === 0) {
+      res.status(400).json({ error: '입력 내용에서 업무 항목을 추출할 수 없었습니다. 다시 시도해 주세요.' });
+      return;
+    }
+
+    // DB 저장
+    const createdItems = await Promise.all(
+      parsedItems.map(item =>
+        prisma.item.create({
+          data: {
+            userId: user.id,
+            spaceId: personalSpace.id,
+            title: item.title,
+            content: item.content,
+            date: new Date(item.date),
+          },
+        })
+      )
+    );
+
+    // 활동 로그
+    for (const item of createdItems) {
+      await prisma.activityLog.create({
+        data: {
+          userId: user.id,
+          action: 'CREATE_ITEM',
+          targetType: 'ITEM',
+          targetId: item.id,
+          details: item.title,
+        },
+      });
+    }
+
+    // requestCount 증가 (atomic update로 race condition 방지)
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { requestCount: { increment: 1 } },
+    });
+
+    // Rating 체크 (20회마다)
+    const shouldRate = updatedUser.requestCount > 0 && updatedUser.requestCount % 20 === 0;
+
+    res.json({
+      success: true,
+      items: createdItems,
+      shouldRate,
+      requestCount: updatedUser?.requestCount || 0,
+    });
+  } catch (error: any) {
+    console.error('Create items error:', error);
+    res.status(500).json({ error: '정리에 실패했습니다. 다시 시도해 주세요.' });
+  }
+});
+
+// PUT /items/:id - Item 수정
+itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+    const id = req.params.id as string;
+
+    const item = await prisma.item.findUnique({ where: { id } });
+    if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+    if (item.userId !== user.id) { res.status(403).json({ error: '본인의 item만 수정할 수 있습니다.' }); return; }
+
+    const { title, content, link, date } = req.body;
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = String(title).slice(0, 500);
+    if (content !== undefined) updateData.content = String(content).slice(0, 10000);
+    if (link !== undefined) {
+      if (link === '' || link === null) {
+        updateData.link = null;
+      } else {
+        // URL 검증: http/https만 허용 (javascript: XSS 방지)
+        try {
+          const url = new URL(String(link));
+          if (!['http:', 'https:'].includes(url.protocol)) {
+            res.status(400).json({ error: '유효하지 않은 URL입니다. http 또는 https URL만 허용됩니다.' });
+            return;
+          }
+          updateData.link = url.toString();
+        } catch {
+          res.status(400).json({ error: '유효하지 않은 URL 형식입니다.' });
+          return;
+        }
+      }
+    }
+    if (date !== undefined) {
+      const newDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const minDate = new Date(today);
+      minDate.setDate(minDate.getDate() - 29);
+      if (newDate > today || newDate < minDate) {
+        res.status(400).json({ error: '유효하지 않은 날짜입니다.' });
+        return;
+      }
+      updateData.date = newDate;
+    }
+
+    const updated = await prisma.item.update({ where: { id }, data: updateData });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: 'UPDATE_ITEM',
+        targetType: 'ITEM',
+        targetId: id,
+        details: updated.title,
+      },
+    });
+
+    res.json({ success: true, item: updated });
+  } catch (error) {
+    console.error('Update item error:', error);
+    res.status(500).json({ error: 'Failed to update item' });
+  }
+});
+
+// DELETE /items/:id - Item 영구 삭제
+itemRoutes.delete('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+    const id = req.params.id as string;
+
+    const item = await prisma.item.findUnique({ where: { id } });
+    if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+    if (item.userId !== user.id) { res.status(403).json({ error: '본인의 item만 삭제할 수 있습니다.' }); return; }
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: 'DELETE_ITEM',
+        targetType: 'ITEM',
+        targetId: id,
+        details: item.title,
+      },
+    });
+
+    await prisma.item.delete({ where: { id } });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete item error:', error);
+    res.status(500).json({ error: 'Failed to delete item' });
+  }
+});
