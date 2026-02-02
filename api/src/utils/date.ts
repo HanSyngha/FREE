@@ -17,3 +17,8 @@ export function getKSTMidnight(): Date {
 export function toKSTDateString(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
+
+/** YYYY-MM-DD 문자열을 KST 자정 Date 객체로 파싱 */
+export function parseKSTDate(dateStr: string): Date {
+  return new Date(dateStr + 'T00:00:00+09:00');
+}

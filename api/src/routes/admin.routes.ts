@@ -6,7 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, loadUser } from '../middleware/auth.js';
 import { syncModelsFromEndpoint } from '../services/llm.service.js';
 import { encrypt } from '../utils/encryption.js';
-import { getKSTMidnight } from '../utils/date.js';
+import { getKSTMidnight, parseKSTDate } from '../utils/date.js';
 import { Queue } from 'bullmq';
 
 function parseRedisUrl(url: string) {
@@ -271,7 +271,7 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
         return;
       }
       if (item.date) {
-        const d = new Date(item.date);
+        const d = parseKSTDate(item.date);
         if (isNaN(d.getTime())) {
           res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` });
           return;
@@ -287,7 +287,7 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
     const createdItems = await prisma.$transaction(async (tx) => {
       const results = [];
       for (const item of items) {
-        const itemDate = item.date ? new Date(item.date) : todayDate;
+        const itemDate = item.date ? parseKSTDate(item.date) : todayDate;
 
         const created = await tx.item.create({
           data: {

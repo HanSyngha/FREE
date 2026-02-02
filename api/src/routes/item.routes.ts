@@ -6,7 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
 import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
 import { parseItemsWithLLM } from '../services/llm.service.js';
-import { getKSTTodayString, getKSTMidnight } from '../utils/date.js';
+import { getKSTTodayString, getKSTMidnight, parseKSTDate } from '../utils/date.js';
 
 export const itemRoutes = Router();
 
@@ -47,7 +47,7 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
 
     // 날짜 유효성 검사 (29일 전 ~ 오늘, 미래 불가, KST 기준)
     if (date) {
-      const inputDate = new Date(date);
+      const inputDate = parseKSTDate(date);
       if (isNaN(inputDate.getTime())) {
         res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
         return;
@@ -96,7 +96,7 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
             spaceId: personalSpace.id,
             title: item.title,
             content: item.content,
-            date: new Date(item.date),
+            date: parseKSTDate(item.date),
           },
         })
       )
@@ -169,7 +169,7 @@ itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
       }
     }
     if (date !== undefined) {
-      const newDate = new Date(date);
+      const newDate = parseKSTDate(date);
       if (isNaN(newDate.getTime())) {
         res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
         return;
@@ -265,7 +265,7 @@ itemRoutes.post('/external', async (req, res) => {
         return;
       }
       if (item.date) {
-        const d = new Date(item.date);
+        const d = parseKSTDate(item.date);
         if (isNaN(d.getTime())) {
           res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` });
           return;
@@ -281,7 +281,7 @@ itemRoutes.post('/external', async (req, res) => {
     const createdItems = await prisma.$transaction(async (tx) => {
       const results = [];
       for (const item of items) {
-        const itemDate = item.date ? new Date(item.date) : todayDate;
+        const itemDate = item.date ? parseKSTDate(item.date) : todayDate;
 
         const created = await tx.item.create({
           data: {

@@ -4,7 +4,7 @@
  */
 import { prisma } from '../index.js';
 import { decrypt } from '../utils/encryption.js';
-import { toKSTDateString } from '../utils/date.js';
+import { toKSTDateString, parseKSTDate } from '../utils/date.js';
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'free';
@@ -162,15 +162,14 @@ export async function parseItemsWithLLM(
 
   const items = JSON.parse(jsonMatch[0]);
 
-  // Validate date range (29 days ago ~ actual today)
-  const todayDate = new Date(userContext.today);
-  todayDate.setHours(0, 0, 0, 0);
+  // Validate date range (29 days ago ~ actual today, KST 기준)
+  const todayDate = parseKSTDate(userContext.today);
   const minDate = new Date(todayDate);
   minDate.setDate(minDate.getDate() - 29);
-  const fallbackDate = new Date(defaultDate);
+  const fallbackDate = parseKSTDate(defaultDate);
 
   return items.map((item: any) => {
-    let itemDate = new Date(item.date);
+    let itemDate = parseKSTDate(item.date);
     if (isNaN(itemDate.getTime()) || itemDate > todayDate || itemDate < minDate) {
       itemDate = fallbackDate;
     }
