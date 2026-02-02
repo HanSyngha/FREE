@@ -7,6 +7,7 @@ import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware
 import { generalLimit } from '../middleware/rateLimit.js';
 import { exportToDocx, exportToXlsx } from '../services/export.service.js';
 import { Queue } from 'bullmq';
+import { getKSTMidnight, toKSTDateString } from '../utils/date.js';
 
 export const reportRoutes = Router();
 
@@ -30,10 +31,8 @@ reportRoutes.post('/personal', authenticateToken, loadUser, generalLimit, async 
     const space = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
     if (!space) { res.status(404).json({ error: 'Personal space not found' }); return; }
 
-    // 최근 7일 items 조회
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setHours(0, 0, 0, 0);
+    // 최근 7일 items 조회 (KST 기준)
+    const periodEnd = getKSTMidnight();
     const periodStart = new Date(periodEnd);
     periodStart.setDate(periodStart.getDate() - 6);
 
@@ -54,10 +53,10 @@ reportRoutes.post('/personal', authenticateToken, loadUser, generalLimit, async 
     // items를 날짜별 텍스트로 변환
     let itemsData = '';
     for (const item of items) {
-      itemsData += `- [${item.date.toISOString().split('T')[0]}] ${item.title}: ${item.content}\n`;
+      itemsData += `- [${toKSTDateString(item.date)}] ${item.title}: ${item.content}\n`;
     }
 
-    const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
+    const periodStr = `${toKSTDateString(periodStart)} ~ ${toKSTDateString(periodEnd)}`;
     const context = `당신은 ${user.username}의 7일간(${periodStr}) 개인 업무 보고서를 작성하고 있습니다.\n\n모든 업무가 빠짐없이 드러나도록 정리해 주세요. 업무를 생략하거나 축약하지 마시오.\n\n`;
 
     // LLM 호출 (callLLM 사용)
@@ -182,9 +181,9 @@ reportRoutes.get('/:id/export', authenticateToken, loadUser, async (req: Authent
     const typeLabel = report.type === 'PART' ? '파트' : report.type === 'GROUP' ? '그룹' : '팀';
     const reportData = {
       title: `${targetName} ${typeLabel} 주간 보고서`,
-      periodStart: report.periodStart.toISOString().split('T')[0]!,
-      periodEnd: report.periodEnd.toISOString().split('T')[0]!,
-      createdAt: report.createdAt.toISOString().split('T')[0]!,
+      periodStart: toKSTDateString(report.periodStart),
+      periodEnd: toKSTDateString(report.periodEnd),
+      createdAt: toKSTDateString(report.createdAt),
       byMemberContent: report.byMemberContent,
       byItemContent: report.byItemContent,
       type: report.type,

@@ -14,6 +14,14 @@ function formatDateWithDay(iso: string) {
   return `${dateStr}(${DAYS[d.getDay()]})`;
 }
 
+/** KST 기준 YYYY-MM-DD */
+function getKSTToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+function toKSTDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+
 interface Item {
   id: string;
   title: string;
@@ -29,7 +37,7 @@ export default function PersonalSpace() {
   const [items, setItems] = useState<Item[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [text, setText] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]!);
+  const [date, setDate] = useState(getKSTToday());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -142,11 +150,11 @@ export default function PersonalSpace() {
 
   const sortedDates = Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
 
-  // 날짜 범위 (오늘 ~ 29일 전)
-  const today = new Date().toISOString().split('T')[0]!;
+  // 날짜 범위 (오늘 ~ 29일 전, KST 기준)
+  const today = getKSTToday();
   const minDate = new Date();
   minDate.setDate(minDate.getDate() - 29);
-  const minDateStr = minDate.toISOString().split('T')[0]!;
+  const minDateStr = toKSTDateString(minDate);
 
   return (
     <div className="max-w-3xl mx-auto">

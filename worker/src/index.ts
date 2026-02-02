@@ -8,6 +8,16 @@ import { Worker, Queue } from 'bullmq';
 
 const prisma = new PrismaClient();
 
+/** KST 기준 오늘 자정 Date 객체 */
+function getKSTMidnight(): Date {
+  const kstToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  return new Date(kstToday + 'T00:00:00+09:00');
+}
+/** Date를 KST 기준 YYYY-MM-DD로 변환 */
+function toKSTDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+
 function parseRedisUrl(url: string) {
   const cleaned = url.replace('redis://', '');
   const [host, portStr] = cleaned.split(':');
@@ -136,9 +146,7 @@ async function generateReportsForTeam(teamId: string, resumeFrom?: string | null
     });
   }
 
-  const now = new Date();
-  const periodEnd = new Date(now);
-  periodEnd.setHours(0, 0, 0, 0);
+  const periodEnd = getKSTMidnight();
   const periodStart = new Date(periodEnd);
   periodStart.setDate(periodStart.getDate() - 6);
 
@@ -262,7 +270,7 @@ async function generatePartReportWorker(
     for (const [name, userItems] of byUser) {
       itemsData += `\n## ${name}\n`;
       for (const item of userItems) {
-        itemsData += `- [${item.date.toISOString().split('T')[0]}] ${item.title}: ${item.content}\n`;
+        itemsData += `- [${toKSTDateString(item.date)}] ${item.title}: ${item.content}\n`;
       }
     }
   }
@@ -273,7 +281,7 @@ async function generatePartReportWorker(
     byItem = '해당 기간 보고할 내용이 없습니다.';
   } else {
     const memberNames = users.map(u => u.username).join(', ');
-    const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
+    const periodStr = `${toKSTDateString(periodStart)} ~ ${toKSTDateString(periodEnd)}`;
     const partContext = `당신은 ${part.name} 파트의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n파트 구성원: ${memberNames}\n\n절대로 파트원간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([
@@ -346,7 +354,7 @@ async function generateGroupReportWorker(
     byItem = '해당 기간 보고할 내용이 없습니다.';
   } else {
     const partNames = group.parts.map(p => p.name).join(', ');
-    const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
+    const periodStr = `${toKSTDateString(periodStart)} ~ ${toKSTDateString(periodEnd)}`;
     const groupContext = `당신은 ${group.name} 그룹의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n그룹 소속 파트: ${partNames}\n\n절대로 파트간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([
@@ -414,7 +422,7 @@ async function generateTeamReportWorker(
     byItem = '해당 기간 보고할 내용이 없습니다.';
   } else {
     const groupNames = team.groups.map(g => g.name).join(', ');
-    const periodStr = `${periodStart.toISOString().split('T')[0]} ~ ${periodEnd.toISOString().split('T')[0]}`;
+    const periodStr = `${toKSTDateString(periodStart)} ~ ${toKSTDateString(periodEnd)}`;
     const teamContext = `당신은 ${team.name} 팀의 7일간(${periodStr}) 주간 보고서를 작성하고 있습니다.\n팀 소속 그룹: ${groupNames}\n\n절대로 그룹간 업무를 비교, 평가하지 마시오. 평가와 비교는 보고서를 읽는 리더가 합니다.\n\n`;
 
     [byMember, byItem] = await Promise.all([

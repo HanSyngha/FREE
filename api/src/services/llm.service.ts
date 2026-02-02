@@ -4,6 +4,7 @@
  */
 import { prisma } from '../index.js';
 import { decrypt } from '../utils/encryption.js';
+import { toKSTDateString } from '../utils/date.js';
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'free';
@@ -176,7 +177,7 @@ export async function parseItemsWithLLM(
     return {
       title: String(item.title || ''),
       content: String(item.content || ''),
-      date: itemDate.toISOString().split('T')[0]!,
+      date: toKSTDateString(itemDate),
     };
   });
 }

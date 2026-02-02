@@ -6,6 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, loadUser } from '../middleware/auth.js';
 import { syncModelsFromEndpoint } from '../services/llm.service.js';
 import { encrypt } from '../utils/encryption.js';
+import { getKSTMidnight } from '../utils/date.js';
 import { Queue } from 'bullmq';
 
 function parseRedisUrl(url: string) {
@@ -255,8 +256,7 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
       return;
     }
 
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
+    const todayDate = getKSTMidnight();
     const minDate = new Date(todayDate);
     minDate.setDate(minDate.getDate() - 29);
 

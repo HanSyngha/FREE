@@ -6,6 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
 import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
 import { parseItemsWithLLM } from '../services/llm.service.js';
+import { getKSTTodayString, getKSTMidnight } from '../utils/date.js';
 
 export const itemRoutes = Router();
 
@@ -42,17 +43,16 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
     const group = await prisma.group.findUnique({ where: { id: user.groupId } });
     const part = await prisma.part.findUnique({ where: { id: user.partId } });
 
-    const today = new Date().toISOString().split('T')[0]!;
+    const today = getKSTTodayString();
 
-    // 날짜 유효성 검사 (29일 전 ~ 오늘, 미래 불가)
+    // 날짜 유효성 검사 (29일 전 ~ 오늘, 미래 불가, KST 기준)
     if (date) {
       const inputDate = new Date(date);
       if (isNaN(inputDate.getTime())) {
         res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
         return;
       }
-      const todayDate = new Date();
-      todayDate.setHours(0, 0, 0, 0);
+      const todayDate = getKSTMidnight();
       const minDate = new Date(todayDate);
       minDate.setDate(minDate.getDate() - 29);
       if (inputDate > todayDate || inputDate < minDate) {
@@ -174,11 +174,10 @@ itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
         res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
         return;
       }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const minDate = new Date(today);
+      const todayMidnight = getKSTMidnight();
+      const minDate = new Date(todayMidnight);
       minDate.setDate(minDate.getDate() - 29);
-      if (newDate > today || newDate < minDate) {
+      if (newDate > todayMidnight || newDate < minDate) {
         res.status(400).json({ error: '유효하지 않은 날짜입니다.' });
         return;
       }
@@ -251,8 +250,7 @@ itemRoutes.post('/external', async (req, res) => {
       return;
     }
 
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
+    const todayDate = getKSTMidnight();
     const minDate = new Date(todayDate);
     minDate.setDate(minDate.getDate() - 29);
 

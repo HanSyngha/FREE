@@ -5,15 +5,15 @@ import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
 import { generalLimit } from '../middleware/rateLimit.js';
+import { getKSTMidnight } from '../utils/date.js';
 
 export const spaceRoutes = Router();
 
 function getDateRange7Days(): { start: Date; end: Date } {
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  const start = new Date();
+  const end = getKSTMidnight();
+  end.setTime(end.getTime() + 24 * 60 * 60 * 1000 - 1); // KST 오늘 23:59:59.999
+  const start = new Date(getKSTMidnight());
   start.setDate(start.getDate() - 6);
-  start.setHours(0, 0, 0, 0);
   return { start, end };
 }
 
