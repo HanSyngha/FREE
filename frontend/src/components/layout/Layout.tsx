@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { authApi } from '../../services/api';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { spacesApi } from '../../services/api';
 
 export default function Layout() {
@@ -21,6 +21,30 @@ export default function Layout() {
     logout();
     navigate('/login');
   };
+
+  // 실시간 시계 (KST, 분 단위 갱신)
+  const [clock, setClock] = useState(() => {
+    const now = new Date();
+    return now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  });
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      setClock(now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }));
+    };
+    // 다음 정각(분)에 맞춰 시작
+    const msToNextMin = (60 - new Date().getSeconds()) * 1000;
+    const timeout = setTimeout(() => {
+      update();
+      const interval = setInterval(update, 60_000);
+      intervalRef.current = interval;
+    }, msToNextMin);
+    return () => {
+      clearTimeout(timeout);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ESC 키로 사이드바 닫기
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -55,6 +79,7 @@ export default function Layout() {
           </NavLink>
         </div>
         <div className="flex items-center gap-4">
+          <span className="text-xs text-gray-400 font-mono tabular-nums">{clock}</span>
           <NavLink to="/profile" className="text-sm text-gray-600 hover:text-gray-900">
             {user?.username} ({user?.loginid})
           </NavLink>
