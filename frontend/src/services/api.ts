@@ -137,6 +137,13 @@ export const profileApi = {
   updateOrganization: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
     api.put('/profile/organization', data),
   getActivityLog: () => api.get('/profile/activity-log'),
+  getPreferences: () => api.get('/profile/preferences'),
+  updatePreferences: (data: {
+    tone?: string;
+    language?: string;
+    emphasis?: string;
+    customInstructions?: string;
+  }) => api.put('/profile/preferences', data),
 };
 
 // ==================== Announcements ====================

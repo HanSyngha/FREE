@@ -27,6 +27,7 @@ export interface AuthenticatedRequest extends Request {
     groupId: string | null;
     partId: string | null;
     requestCount: number;
+    preferences: Record<string, unknown> | null;
     createdAt: Date;
     lastActive: Date;
   };

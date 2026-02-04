@@ -2,8 +2,9 @@
  * Personal Space Page - 개인 Space
  */
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, itemsApi, ratingApi, reportsApi } from '../services/api';
+import { spacesApi, itemsApi, ratingApi, reportsApi, profileApi } from '../services/api';
 import ItemBlock from '../components/common/ItemBlock';
 import RatingPopup from '../components/common/RatingPopup';
 
@@ -32,6 +33,13 @@ interface Item {
   updatedAt: string;
 }
 
+interface Preferences {
+  tone?: string;
+  language?: string;
+  emphasis?: string;
+  customInstructions?: string;
+}
+
 export default function PersonalSpace() {
   const { user } = useAuthStore();
   const [items, setItems] = useState<Item[]>([]);
@@ -43,6 +51,7 @@ export default function PersonalSpace() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [showRating, setShowRating] = useState(false);
+  const [preferences, setPreferences] = useState<Preferences | null>(null);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -55,7 +64,10 @@ export default function PersonalSpace() {
     }
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => {
+    fetchItems();
+    profileApi.getPreferences().then(res => setPreferences(res.data.preferences || {})).catch(() => {});
+  }, []);
 
   const handleSubmit = async () => {
     if (!text.trim() || submitting) return;
@@ -156,9 +168,46 @@ export default function PersonalSpace() {
   minDate.setDate(minDate.getDate() - 29);
   const minDateStr = toKSTDateString(minDate);
 
+  // 설정 요약 텍스트 생성
+  const getPreferencesSummary = () => {
+    if (!preferences) return null;
+    const parts: string[] = [];
+    if (preferences.tone) {
+      const toneLabels: Record<string, string> = { formal: '격식체', concise: '간결체' };
+      parts.push(toneLabels[preferences.tone] || preferences.tone);
+    }
+    if (preferences.language === 'english') parts.push('영어');
+    if (preferences.emphasis) parts.push(`강조: ${preferences.emphasis}`);
+    if (preferences.customInstructions) parts.push('추가 지시사항 있음');
+    return parts.length > 0 ? parts.join(' · ') : null;
+  };
+
+  const prefSummary = getPreferencesSummary();
+  const hasPreferences = prefSummary !== null;
+
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 기록</h1>
+
+      {/* 설정 안내 배너 */}
+      <div className={`rounded-lg p-3 mb-4 flex items-center justify-between ${hasPreferences ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 border border-gray-200'}`}>
+        <div className="flex items-center gap-2">
+          <svg className={`w-4 h-4 ${hasPreferences ? 'text-primary-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="text-sm">
+            {hasPreferences ? (
+              <span className="text-primary-700">{prefSummary}</span>
+            ) : (
+              <span className="text-gray-500">AI 정리 스타일을 설정하면 나만의 방식으로 업무를 기록할 수 있어요</span>
+            )}
+          </span>
+        </div>
+        <Link to="/profile" className="text-xs text-primary-600 hover:underline whitespace-nowrap ml-2">
+          {hasPreferences ? '설정 변경' : '설정하기'}
+        </Link>
+      </div>
 
       {/* 입력 창 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">

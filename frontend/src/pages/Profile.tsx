@@ -1,5 +1,5 @@
 /**
- * Profile Page - 프로필 + 활동 로그 + 그룹/파트 변경
+ * Profile Page - 프로필 + 활동 로그 + 그룹/파트 변경 + 업무 기록 설정
  */
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
@@ -11,6 +11,16 @@ export default function Profile() {
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [showOrgChange, setShowOrgChange] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Preferences state
+  const [prefTone, setPrefTone] = useState('');
+  const [prefCustomTone, setPrefCustomTone] = useState('');
+  const [prefLanguage, setPrefLanguage] = useState('korean');
+  const [prefEmphasis, setPrefEmphasis] = useState('');
+  const [prefCustomInstructions, setPrefCustomInstructions] = useState('');
+  const [prefSaving, setPrefSaving] = useState(false);
+  const [prefSuccess, setPrefSuccess] = useState(false);
+  const [prefError, setPrefError] = useState('');
 
   // Organization change state
   const [groups, setGroups] = useState<any[]>([]);
@@ -33,6 +43,19 @@ export default function Profile() {
     Promise.all([
       profileApi.get().then(res => setProfile(res.data.user)),
       profileApi.getActivityLog().then(res => setActivityLogs(res.data.logs)),
+      profileApi.getPreferences().then(res => {
+        const prefs = res.data.preferences || {};
+        // 어조: custom 값이면 직접 입력으로 설정
+        if (prefs.tone && !['formal', 'concise'].includes(prefs.tone)) {
+          setPrefTone('custom');
+          setPrefCustomTone(prefs.tone);
+        } else {
+          setPrefTone(prefs.tone || '');
+        }
+        setPrefLanguage(prefs.language || 'korean');
+        setPrefEmphasis(prefs.emphasis || '');
+        setPrefCustomInstructions(prefs.customInstructions || '');
+      }),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -107,6 +130,27 @@ export default function Profile() {
     }
   };
 
+  const handleSavePreferences = async () => {
+    setPrefSaving(true);
+    setPrefSuccess(false);
+    setPrefError('');
+    try {
+      const tone = prefTone === 'custom' ? prefCustomTone : prefTone;
+      await profileApi.updatePreferences({
+        tone: tone || undefined,
+        language: prefLanguage,
+        emphasis: prefEmphasis || undefined,
+        customInstructions: prefCustomInstructions || undefined,
+      });
+      setPrefSuccess(true);
+      setTimeout(() => setPrefSuccess(false), 2000);
+    } catch (err: any) {
+      setPrefError(err.response?.data?.error || '설정 저장에 실패했습니다.');
+    } finally {
+      setPrefSaving(false);
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" /></div>;
 
   const actionLabels: Record<string, string> = {
@@ -153,6 +197,83 @@ export default function Profile() {
         <button onClick={() => setShowOrgChange(!showOrgChange)}
           className="mt-4 text-sm text-primary-600 hover:underline">
           그룹/파트 변경
+        </button>
+      </div>
+
+      {/* 업무 기록 설정 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h2 className="text-sm font-bold text-gray-700 mb-4">업무 기록 설정</h2>
+        <p className="text-xs text-gray-500 mb-4">Item 추가 시 AI가 적용할 개인 설정입니다.</p>
+
+        {prefError && <div className="mb-3 p-2 bg-red-50 text-red-600 text-sm rounded">{prefError}</div>}
+
+        {/* 어조 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">어조</label>
+          <div className="flex gap-2">
+            <select
+              value={prefTone}
+              onChange={(e) => { setPrefTone(e.target.value); if (e.target.value !== 'custom') setPrefCustomTone(''); }}
+              className="flex-1 px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="">기본</option>
+              <option value="formal">격식체</option>
+              <option value="concise">간결체</option>
+              <option value="custom">직접 입력</option>
+            </select>
+            {prefTone === 'custom' && (
+              <input
+                value={prefCustomTone}
+                onChange={(e) => setPrefCustomTone(e.target.value)}
+                placeholder="예: 친근하게, 전문적으로"
+                className="flex-1 px-3 py-2 border rounded-lg text-sm"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* 언어 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">작성 언어</label>
+          <select
+            value={prefLanguage}
+            onChange={(e) => setPrefLanguage(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="korean">한국어</option>
+            <option value="english">영어</option>
+          </select>
+        </div>
+
+        {/* 강조 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">강조할 내용</label>
+          <input
+            value={prefEmphasis}
+            onChange={(e) => setPrefEmphasis(e.target.value)}
+            placeholder="예: AI 프로젝트를 우선 강조"
+            className="w-full px-3 py-2 border rounded-lg text-sm"
+          />
+        </div>
+
+        {/* 추가 지시사항 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-600 mb-1">추가 지시사항</label>
+          <textarea
+            value={prefCustomInstructions}
+            onChange={(e) => setPrefCustomInstructions(e.target.value)}
+            placeholder="예: 기술 용어는 영어로 유지해줘"
+            rows={2}
+            className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+          />
+        </div>
+
+        <button
+          onClick={handleSavePreferences}
+          disabled={prefSaving}
+          className="w-full py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50"
+        >
+          {prefSaving ? '저장 중...' : prefSuccess ? '저장됨!' : '설정 저장'}
         </button>
       </div>
 

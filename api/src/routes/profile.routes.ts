@@ -151,6 +151,45 @@ profileRoutes.put('/organization', authenticateToken, loadUser, async (req: Auth
   }
 });
 
+// GET /profile/preferences - 개인 설정 조회
+profileRoutes.get('/preferences', authenticateToken, loadUser, generalLimit, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { preferences: true },
+    });
+
+    res.json({ preferences: user?.preferences || {} });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({ error: 'Failed to get preferences' });
+  }
+});
+
+// PUT /profile/preferences - 개인 설정 저장
+profileRoutes.put('/preferences', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { tone, language, emphasis, customInstructions } = req.body;
+
+    // null/undefined 값 제거하여 저장
+    const preferences: Record<string, string> = {};
+    if (tone) preferences.tone = tone;
+    if (language) preferences.language = language;
+    if (emphasis) preferences.emphasis = emphasis;
+    if (customInstructions) preferences.customInstructions = customInstructions;
+
+    await prisma.user.update({
+      where: { id: req.userId! },
+      data: { preferences },
+    });
+
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
 // GET /profile/activity-log - 활동 로그 (최근 30일)
 profileRoutes.get('/activity-log', authenticateToken, loadUser, generalLimit, async (req: AuthenticatedRequest, res) => {
   try {

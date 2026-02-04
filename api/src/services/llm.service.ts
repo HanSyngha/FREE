@@ -102,10 +102,48 @@ export async function parseItemsWithLLM(
     partName: string;
     today: string;
     defaultDate?: string;
+    preferences?: {
+      tone?: string;
+      language?: string;
+      emphasis?: string;
+      customInstructions?: string;
+    };
   },
   userInfo: { loginid: string; username: string; deptname: string }
 ): Promise<Array<{ title: string; content: string; date: string }>> {
   const defaultDate = userContext.defaultDate || userContext.today;
+  const prefs = userContext.preferences || {};
+
+  // 어조 설정
+  const toneMap: Record<string, string> = {
+    formal: '격식체로 작성',
+    concise: '간결하게 작성',
+  };
+  const toneInstruction = prefs.tone
+    ? (toneMap[prefs.tone] || prefs.tone)
+    : '';
+
+  // 언어 설정
+  const languageInstruction = prefs.language === 'english'
+    ? '모든 업무 항목을 영어로 작성해 주세요.'
+    : '';
+
+  // 강조 설정
+  const emphasisInstruction = prefs.emphasis
+    ? `다음 내용을 특히 강조해서 작성해 주세요: ${prefs.emphasis}`
+    : '';
+
+  // 추가 지시사항
+  const customInstruction = prefs.customInstructions || '';
+
+  // 사용자 선호 설정 섹션 구성
+  const preferencesSection = [toneInstruction, languageInstruction, emphasisInstruction, customInstruction]
+    .filter(Boolean)
+    .join('\n- ');
+
+  const preferencesPrompt = preferencesSection
+    ? `\n\n## 사용자 선호 설정\n위 설정을 반영하여 업무 항목을 작성해 주세요:\n- ${preferencesSection}`
+    : '';
 
   const systemPrompt = `당신은 업무 보고 도우미입니다.
 
@@ -133,7 +171,7 @@ export async function parseItemsWithLLM(
 2. 다른 사람의 업무나 일반적인 공유 정보는 제외합니다
 3. 하나의 입력에서 여러 item이 나올 수 있습니다
 4. 날짜 정보가 텍스트에 포함된 경우 해당 날짜를 item의 date로 지정합니다
-5. 날짜를 특정할 수 없으면 ${defaultDate}를 사용합니다
+5. 날짜를 특정할 수 없으면 ${defaultDate}를 사용합니다${preferencesPrompt}
 
 각 item은 다음 JSON 형식으로 출력하세요:
 [

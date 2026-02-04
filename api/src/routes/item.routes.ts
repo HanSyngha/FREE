@@ -63,6 +63,7 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
 
     // LLM으로 item 분리
     // today는 항상 실제 오늘 날짜 (날짜 검증용), defaultDate는 사용자가 선택한 날짜 (fallback용)
+    const preferences = (user.preferences as Record<string, string>) || {};
     const parsedItems = await parseItemsWithLLM(
       text,
       {
@@ -73,6 +74,7 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
         partName: part?.name || '',
         today,
         defaultDate: date || today,
+        preferences,
       },
       {
         loginid: user.loginid,

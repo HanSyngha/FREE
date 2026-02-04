@@ -17,6 +17,7 @@ model User {
   groupId      String?
   partId       String?
   requestCount Int       @default(0)
+  preferences  Json?     // { tone?, language?, emphasis?, customInstructions? }
   createdAt    DateTime  @default(now())
   lastActive   DateTime  @default(now())
 
