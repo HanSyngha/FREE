@@ -70,6 +70,34 @@ adminRoutes.post('/llm/sync', authenticateToken, requireSuperAdmin, loadUser, as
       }
     );
 
+    // 동기화된 모델 목록에 없는 기존 활성 config 비활성화
+    const availableModelIds = models.map(m => m.id);
+    const activeConfig = await prisma.lLMConfig.findFirst({ where: { isActive: true } });
+
+    if (activeConfig && !availableModelIds.includes(activeConfig.modelId)) {
+      console.log(`[Sync] Active model '${activeConfig.modelId}' no longer available, deactivating...`);
+      await prisma.lLMConfig.update({
+        where: { id: activeConfig.id },
+        data: { isActive: false },
+      });
+
+      // 사용 가능한 첫 번째 모델로 자동 전환
+      if (models.length > 0) {
+        const first = models[0];
+        await prisma.lLMConfig.create({
+          data: {
+            endpoint: targetEndpoint,
+            apiKey: apiKey ? encrypt(apiKey) : '',
+            modelId: first.id,
+            modelName: first.displayName,
+            isActive: true,
+            lastSyncAt: new Date(),
+          },
+        });
+        console.log(`[Sync] Auto-switched to model: ${first.displayName} (${first.id})`);
+      }
+    }
+
     res.json({ models, syncedAt: new Date().toISOString() });
   } catch (error) {
     console.error('Sync models error:', error);
