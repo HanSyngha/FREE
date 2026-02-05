@@ -63,7 +63,7 @@ export async function callLLM(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Service-Id': LLM_SERVICE_ID,
-    'X-User-Id': encodeURIComponent(userInfo.loginid),
+    'X-User-Id': userInfo.loginid,  // ONCE와 동일하게 encode 없이
     'X-User-Name': encodeURIComponent(userInfo.username),
     'X-User-Dept': encodeURIComponent(userInfo.deptname),
   };
@@ -285,7 +285,7 @@ export async function syncModelsFromEndpoint(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Service-Id': LLM_SERVICE_ID,
-    'X-User-Id': encodeURIComponent(userInfo.loginid),
+    'X-User-Id': userInfo.loginid,  // ONCE와 동일하게 encode 없이
     'X-User-Name': encodeURIComponent(userInfo.username),
     'X-User-Dept': encodeURIComponent(userInfo.deptname),
   };
@@ -323,7 +323,7 @@ export async function submitRating(
     headers: {
       'Content-Type': 'application/json',
       'X-Service-Id': LLM_SERVICE_ID,
-      'X-User-Id': encodeURIComponent(userInfo.loginid),
+      'X-User-Id': userInfo.loginid,  // ONCE와 동일하게 encode 없이
       'X-User-Name': encodeURIComponent(userInfo.username),
       'X-User-Dept': encodeURIComponent(userInfo.deptname),
     },
