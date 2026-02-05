@@ -27,6 +27,43 @@ export async function getActiveLLMConfig() {
 }
 
 /**
+ * Dashboard /v1/models API에서 첫 번째 사용 가능한 모델 조회 (ONCE 패턴)
+ * 사업부 필터링을 위해 user 정보 필수
+ */
+async function fetchFirstAvailableModel(
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<string | null> {
+  try {
+    const baseUrl = LLM_PROXY_URL
+      .replace(/\/chat\/completions$/, '')
+      .replace(/\/v1$/, '');
+    const modelsUrl = `${baseUrl}/v1/models`;
+
+    const response = await fetch(modelsUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Id': LLM_SERVICE_ID,
+        'X-User-Id': userInfo.loginid,
+        'X-User-Name': encodeURIComponent(userInfo.username),
+        'X-User-Dept': encodeURIComponent(userInfo.deptname),
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json() as any;
+      const models = data.data || [];
+      if (models.length > 0) {
+        console.log(`[LLM] Fetched ${models.length} available models, using: ${models[0].id}`);
+        return models[0].id;
+      }
+    }
+  } catch (e) {
+    console.error('[LLM] Failed to fetch models from proxy:', e);
+  }
+  return null;
+}
+
+/**
  * LLM Chat Completions 호출 - ONCE와 동일 패턴
  */
 export async function callLLM(
@@ -38,27 +75,36 @@ export async function callLLM(
     throw new Error('userInfo is required for LLM calls');
   }
 
+  // ONCE 패턴: 호출 시점에 동적으로 사용 가능한 모델 가져오기
+  const dynamicModel = await fetchFirstAvailableModel(userInfo);
+
   const config = await getActiveLLMConfig();
 
-  let endpoint: string;
+  let chatUrl: string;
   let apiKey: string;
   let modelId: string;
 
-  if (config) {
-    endpoint = config.endpoint;
-    apiKey = decrypt(config.apiKey);
+  // 모델 우선순위: 동적으로 가져온 모델 > DB config > default
+  if (dynamicModel) {
+    modelId = dynamicModel;
+  } else if (config?.modelId) {
     modelId = config.modelId;
-  } else if (LLM_PROXY_URL) {
-    endpoint = LLM_PROXY_URL.replace(/\/chat\/completions$/, '');
-    apiKey = '';
+  } else {
     modelId = 'default';
+  }
+
+  // endpoint 결정
+  if (config?.endpoint) {
+    chatUrl = config.endpoint.endsWith('/chat/completions')
+      ? config.endpoint
+      : `${config.endpoint}/chat/completions`;
+    apiKey = config.apiKey ? decrypt(config.apiKey) : '';
+  } else if (LLM_PROXY_URL) {
+    chatUrl = LLM_PROXY_URL;
+    apiKey = '';
   } else {
     throw new Error('No LLM configuration available');
   }
-
-  const chatUrl = endpoint.endsWith('/chat/completions')
-    ? endpoint
-    : `${endpoint}/chat/completions`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
