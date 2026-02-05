@@ -31,8 +31,13 @@ export async function getActiveLLMConfig() {
  */
 export async function callLLM(
   messages: LLMMessage[],
-  userInfo?: { loginid: string; username: string; deptname: string }
+  userInfo: { loginid: string; username: string; deptname: string }
 ): Promise<string> {
+  // userInfo는 필수 - Dashboard에서 권한 체크에 사용
+  if (!userInfo || !userInfo.loginid) {
+    throw new Error('userInfo is required for LLM calls');
+  }
+
   const config = await getActiveLLMConfig();
 
   let endpoint: string;
@@ -58,17 +63,25 @@ export async function callLLM(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Service-Id': LLM_SERVICE_ID,
+    'X-User-Id': encodeURIComponent(userInfo.loginid),
+    'X-User-Name': encodeURIComponent(userInfo.username),
+    'X-User-Dept': encodeURIComponent(userInfo.deptname),
   };
 
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
-  if (userInfo) {
-    headers['X-User-Id'] = encodeURIComponent(userInfo.loginid);
-    headers['X-User-Name'] = encodeURIComponent(userInfo.username);
-    headers['X-User-Dept'] = encodeURIComponent(userInfo.deptname);
-  }
+  // 디버그 로그
+  console.log('[LLM] Request:', {
+    url: chatUrl,
+    model: modelId,
+    serviceId: LLM_SERVICE_ID,
+    userId: userInfo.loginid,
+    userName: userInfo.username,
+    userDept: userInfo.deptname,
+    hasApiKey: !!apiKey,
+  });
 
   const response = await fetch(chatUrl, {
     method: 'POST',
@@ -82,10 +95,18 @@ export async function callLLM(
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[LLM] Error:', {
+      status: response.status,
+      error: errorText,
+      url: chatUrl,
+      model: modelId,
+      headers: { ...headers, Authorization: headers.Authorization ? '[REDACTED]' : undefined },
+    });
     throw new Error(`LLM API error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json() as LLMResponse;
+  console.log('[LLM] Success:', { model: modelId, userId: userInfo.loginid });
   return data.choices[0]?.message?.content || '';
 }
 

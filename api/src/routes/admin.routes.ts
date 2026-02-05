@@ -119,14 +119,36 @@ adminRoutes.put('/llm/activate/:modelId', authenticateToken, requireSuperAdmin, 
     const modelId = req.params.modelId as string;
     const { modelName, endpoint, apiKey } = req.body;
 
+    // endpoint가 없으면 기존 config나 env에서 가져오기
+    let targetEndpoint = endpoint;
+    let targetApiKey = apiKey;
+    if (!targetEndpoint) {
+      const existingConfig = await prisma.lLMConfig.findFirst({
+        where: { isActive: true },
+      }) || await prisma.lLMConfig.findFirst({
+        orderBy: { createdAt: 'desc' },
+      });
+      targetEndpoint = existingConfig?.endpoint || process.env.LLM_PROXY_URL || '';
+      // apiKey도 지정 안 됐으면 기존 것 유지
+      if (!targetApiKey && existingConfig?.apiKey) {
+        targetApiKey = '__KEEP_EXISTING__';
+      }
+    }
+
+    if (!targetEndpoint) {
+      res.status(400).json({ error: 'endpoint is required' });
+      return;
+    }
+
     // 기존 모두 비활성화
     await prisma.lLMConfig.updateMany({ where: { isActive: true }, data: { isActive: false } });
 
     // 새 config 생성 또는 업데이트
+    const existingForKey = await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
     const config = await prisma.lLMConfig.create({
       data: {
-        endpoint: endpoint || '',
-        apiKey: apiKey ? encrypt(apiKey) : '',
+        endpoint: targetEndpoint,
+        apiKey: targetApiKey === '__KEEP_EXISTING__' ? (existingForKey?.apiKey || '') : (targetApiKey ? encrypt(targetApiKey) : ''),
         modelId,
         modelName: modelName || modelId,
         isActive: true,
