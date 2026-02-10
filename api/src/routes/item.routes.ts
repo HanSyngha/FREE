@@ -225,21 +225,21 @@ itemRoutes.post('/external', async (req, res) => {
     if (!user) {
       res.status(404).json({
         error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://3.39.170.84.nip.io:6090',
       });
       return;
     }
     if (!user.teamId) {
       res.status(400).json({
         error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://3.39.170.84.nip.io:6090',
       });
       return;
     }
     if (!user.groupId || !user.partId) {
       res.status(400).json({
         error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다. 먼저 웹에서 온보딩을 완료하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://3.39.170.84.nip.io:6090',
       });
       return;
     }
@@ -315,7 +315,7 @@ itemRoutes.post('/external', async (req, res) => {
       items: createdItems,
       count: createdItems.length,
       message: `${createdItems.length}건의 업무가 추가되었습니다. 아래 링크에서 확인하세요.`,
-      link: 'http://a2g.samsungds.net:15001',
+      link: 'https://3.39.170.84.nip.io:6090',
     });
   } catch (error) {
     console.error('External create items error:', error);

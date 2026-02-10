@@ -180,10 +180,7 @@ export default function Layout() {
         <main className={`flex-1 min-h-screen p-6 pb-16 transition-all duration-200 ease-in-out ${sidebarOpen ? 'ml-60' : 'ml-0'}`}>
           <Outlet />
           <footer className="mt-12 pt-4 border-t border-gray-100 text-center text-[11px] text-gray-400">
-            syngha.han 개인 프로젝트 &middot; 버그/문의:{' '}
-            <a href="http://a2g.samsungds.net:4090/feedback" target="_blank" rel="noopener noreferrer"
-              className="underline hover:text-gray-500">Feedback</a>
-            {' '}또는 syngha.han
+            syngha.han 개인 프로젝트
           </footer>
         </main>
       </div>

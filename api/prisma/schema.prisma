@@ -11,8 +11,8 @@ model User {
   id           String    @id @default(uuid())
   loginid      String    @unique
   username     String
-  deptname     String
-  businessUnit String
+  deptname     String    @default("")
+  businessUnit String    @default("")
   teamId       String?
   groupId      String?
   partId       String?
@@ -20,6 +20,12 @@ model User {
   preferences  Json?     // { tone?, language?, emphasis?, customInstructions? }
   createdAt    DateTime  @default(now())
   lastActive   DateTime  @default(now())
+
+  // OAuth fields
+  provider     String    @default("")
+  providerId   String    @default("")
+  email        String?
+  profileImage String?
 
   team         Team?     @relation(fields: [teamId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])
@@ -31,7 +37,17 @@ model User {
   activityLogs ActivityLog[]
   announcements Announcement[]
 
+  @@unique([provider, providerId])
+  @@index([email])
   @@map("users")
+}
+
+model Admin {
+  id    String @id @default(uuid())
+  email String @unique
+  role  String @default("SUPER_ADMIN")
+
+  @@map("admins")
 }
 
 model Team {

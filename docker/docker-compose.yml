@@ -1,64 +1,51 @@
-name: free
-version: '3.8'
-
-# Proxy 설정 (ONCE와 동일 패턴)
-x-proxy-env: &proxy-env
-  HTTP_PROXY: ${HTTP_PROXY:-}
-  HTTPS_PROXY: ${HTTPS_PROXY:-}
-  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,genai.samsungds.net,a2g.samsungds.net}
-  http_proxy: ${HTTP_PROXY:-}
-  https_proxy: ${HTTPS_PROXY:-}
-  no_proxy: ${NO_PROXY:-localhost,127.0.0.1,genai.samsungds.net,a2g.samsungds.net}
-  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+name: free-main
 
 services:
-  # PostgreSQL - Port 15003
+  # PostgreSQL Database (internal only)
   free-db:
     image: postgres:15-alpine
-    container_name: free-db
+    container_name: free-main-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-free}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-free_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-free}
     volumes:
       - free-db-data:/var/lib/postgresql/data
-    ports:
-      - "15003:5432"
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-free} -d ${POSTGRES_DB:-free}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - free-network
+      - free-main-network
 
-  # Redis - Port 15004
+  # Redis Cache (internal only)
   free-redis:
     image: redis:7-alpine
-    container_name: free-redis
+    container_name: free-main-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - free-redis-data:/data
-    ports:
-      - "15004:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - free-network
+      - free-main-network
 
-  # API Server - Port 15002
+  # API Server (internal only, accessed via Nginx)
   free-api:
     build:
       context: ..
       dockerfile: docker/Dockerfile.api
-      args:
-        <<: *proxy-env
-    container_name: free-api
+    container_name: free-main-api
     restart: unless-stopped
     depends_on:
       free-db:
@@ -67,61 +54,54 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      PORT: 15002
-      DATABASE_URL: postgresql://${POSTGRES_USER:-free}:${POSTGRES_PASSWORD:-free_password}@free-db:5432/${POSTGRES_DB:-free}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-free}:${POSTGRES_PASSWORD}@free-db:5432/${POSTGRES_DB:-free}
       REDIS_URL: redis://free-redis:6379
-      JWT_SECRET: ${JWT_SECRET:-free-jwt-secret-change-in-production-2024}
-      DEVELOPERS: ${DEVELOPERS:-syngha.han}
-      CORS_ORIGIN: https://a2g.samsungds.net:15001,http://a2g.samsungds.net:15001
-      LLM_PROXY_URL: ${LLM_PROXY_URL:-http://a2g.samsungds.net:4090/v1/chat/completions}
+      JWT_SECRET: ${JWT_SECRET}
+      DEVELOPERS: ${DEVELOPERS:-}
+      CORS_ORIGIN: ${PUBLIC_URL}
+      LLM_PROXY_URL: ${LLM_PROXY_URL}
       LLM_SERVICE_ID: ${LLM_SERVICE_ID:-free}
-      DASHBOARD_URL: ${DASHBOARD_URL:-http://a2g.samsungds.net:4090}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-free-encryption-key-change-in-production-2024}
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      DASHBOARD_URL: ${DASHBOARD_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      PUBLIC_URL: ${PUBLIC_URL}
     volumes:
       - api-logs:/app/logs
+    expose:
+      - "3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:15002/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - free-network
+      - free-main-network
 
-  # Frontend (Nginx) - Port 15001
+  # Frontend SPA (internal only, accessed via Nginx)
   free-frontend:
     build:
       context: ..
       dockerfile: docker/Dockerfile.frontend
       args:
-        <<: *proxy-env
         VITE_API_URL: /api
-        VITE_SSO_URL: ${VITE_SSO_URL:-https://genai.samsungds.net:36810}
-        VITE_DASHBOARD_URL: ${DASHBOARD_URL:-http://a2g.samsungds.net:4090}
-    container_name: free-frontend
+        VITE_DASHBOARD_URL: ${DASHBOARD_URL}
+    container_name: free-main-frontend
     restart: unless-stopped
     depends_on:
       free-api:
         condition: service_healthy
-    ports:
-      - "15001:80"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    expose:
+      - "80"
     networks:
-      - free-network
+      - free-main-network
 
-  # Worker - Port 15005
+  # Worker (BullMQ background job processor)
   free-worker:
     build:
       context: ..
       dockerfile: docker/Dockerfile.worker
-      args:
-        <<: *proxy-env
-    container_name: free-worker
+    container_name: free-main-worker
     restart: unless-stopped
     depends_on:
       free-db:
@@ -130,15 +110,33 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-free}:${POSTGRES_PASSWORD:-free_password}@free-db:5432/${POSTGRES_DB:-free}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-free}:${POSTGRES_PASSWORD}@free-db:5432/${POSTGRES_DB:-free}
       REDIS_URL: redis://free-redis:6379
-      LLM_PROXY_URL: ${LLM_PROXY_URL:-http://a2g.samsungds.net:4090/v1/chat/completions}
+      LLM_PROXY_URL: ${LLM_PROXY_URL}
       LLM_SERVICE_ID: ${LLM_SERVICE_ID:-free}
-      DASHBOARD_URL: ${DASHBOARD_URL:-http://a2g.samsungds.net:4090}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-free-encryption-key-change-in-production-2024}
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      DASHBOARD_URL: ${DASHBOARD_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     networks:
-      - free-network
+      - free-main-network
+
+  # Nginx Reverse Proxy (HTTPS, single entry point)
+  nginx:
+    image: nginx:alpine
+    container_name: free-main-proxy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ../nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ${CERTBOT_CONF_PATH:-/home/ubuntu/dashboard/certbot/conf}:/etc/letsencrypt:ro
+    command: /bin/sh -c "envsubst '$$DOMAIN' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
+    ports:
+      - "${PROXY_PORT:-6090}:6090"
+    depends_on:
+      - free-api
+      - free-frontend
+    networks:
+      - free-main-network
 
 volumes:
   free-db-data:
@@ -149,5 +147,5 @@ volumes:
     driver: local
 
 networks:
-  free-network:
+  free-main-network:
     driver: bridge

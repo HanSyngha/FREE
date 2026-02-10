@@ -1,17 +1,9 @@
 # Build stage
 FROM node:24-alpine AS builder
 
-# Alpine apk를 http로 변경 (SSL 문제 우회)
-RUN sed -i 's/https/http/' /etc/apk/repositories
-
-# Prisma용 OpenSSL 설치
 RUN apk add --no-cache openssl
 
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
 WORKDIR /app
-
-RUN npm config set strict-ssl false
 
 # Copy package files
 COPY api/package*.json ./
@@ -35,11 +27,7 @@ RUN npx tsc
 # Production stage
 FROM node:24-alpine AS production
 
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
-# Alpine apk를 http로 변경 + Prisma용 OpenSSL 설치
-RUN sed -i 's/https/http/' /etc/apk/repositories && \
-    apk add --no-cache openssl
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
@@ -62,16 +50,12 @@ RUN addgroup -g 1001 -S nodejs && \
 
 USER nodejs
 
-# Expose port
-EXPOSE 15002
+EXPOSE 3000
 
-# Environment variables
 ENV NODE_ENV=production
-ENV PORT=15002
+ENV PORT=3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:15002/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Run prisma db push at startup to sync schema, then start the server
 CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]

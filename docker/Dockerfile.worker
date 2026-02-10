@@ -1,17 +1,9 @@
 # Build stage
 FROM node:24-alpine AS builder
 
-# Alpine apk를 http로 변경 (SSL 문제 우회)
-RUN sed -i 's/https/http/' /etc/apk/repositories
-
-# Prisma용 OpenSSL 설치
 RUN apk add --no-cache openssl
 
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
 WORKDIR /app
-
-RUN npm config set strict-ssl false
 
 # Copy package files
 COPY worker/package*.json ./
@@ -35,11 +27,7 @@ RUN npx tsc
 # Production stage
 FROM node:24-alpine AS production
 
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
-# Alpine apk를 http로 변경 + Prisma용 OpenSSL 설치
-RUN sed -i 's/https/http/' /etc/apk/repositories && \
-    apk add --no-cache openssl
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
@@ -62,13 +50,8 @@ RUN addgroup -g 1001 -S nodejs && \
 
 USER nodejs
 
-# Expose port
-EXPOSE 15005
-
-# Environment variables
 ENV NODE_ENV=production
 
-# Health check (worker는 HTTP endpoint 없으므로 프로세스 확인)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD pgrep -f "node dist/index.js" || exit 1
 
