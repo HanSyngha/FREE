@@ -52,6 +52,7 @@ export default function PersonalSpace() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [showRating, setShowRating] = useState(false);
+  const [showOlderReports, setShowOlderReports] = useState(false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
   const fetchItems = async () => {
@@ -275,28 +276,67 @@ export default function PersonalSpace() {
           </div>
         )}
         {reports.length > 0 ? (
-          reports.map((report: any, idx: number) => (
-            <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span onClick={() => navigate(`/report/${report.id}`)}
-                  className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
-                  {getReportLabel(report, idx)}
-                </span>
-                <div className="flex gap-2">
-                  <button onClick={() => handleExportReport(report.id, 'docx')}
-                    className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
-                  <button onClick={() => handleExportReport(report.id, 'xlsx')}
-                    className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
-                  <button onClick={() => handleDeleteReport(report.id)}
-                    className="text-xs px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100">삭제</button>
+          (() => {
+            const latest = reports[0];
+            const older = reports.slice(1);
+            return (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span onClick={() => navigate(`/report/${latest.id}`)}
+                      className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
+                      {getReportLabel(latest, 0)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleExportReport(latest.id, 'docx')}
+                        className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                      <button onClick={() => handleExportReport(latest.id, 'xlsx')}
+                        className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+                      <button onClick={() => handleDeleteReport(latest.id)}
+                        className="text-xs px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100">삭제</button>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR')}</span>
+                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR')}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
-                <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
-              </div>
-            </div>
-          ))
+                {older.length > 0 && (
+                  <>
+                    <button onClick={() => setShowOlderReports(!showOlderReports)}
+                      className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
+                      <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      이전 보고서 ({older.length})
+                    </button>
+                    {showOlderReports && older.map((report: any, idx: number) => (
+                      <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span onClick={() => navigate(`/report/${report.id}`)}
+                            className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
+                            {getReportLabel(report, idx + 1)}
+                          </span>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleExportReport(report.id, 'docx')}
+                              className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                            <button onClick={() => handleExportReport(report.id, 'xlsx')}
+                              className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+                            <button onClick={() => handleDeleteReport(report.id)}
+                              className="text-xs px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100">삭제</button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
+                          <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()
         ) : (
           <p className="text-xs text-gray-400">생성된 보고서가 없습니다. 버튼을 눌러 생성하세요.</p>
         )}
