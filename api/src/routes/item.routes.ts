@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest, loadUser, isSuperAdmin } from '../middleware/auth.js';
 import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
 import { parseItemsWithLLM } from '../services/llm.service.js';
 import { getKSTTodayString, getKSTMidnight, parseKSTDate } from '../utils/date.js';
@@ -331,7 +331,9 @@ itemRoutes.delete('/:id', authenticateToken, loadUser, async (req: Authenticated
 
     const item = await prisma.item.findUnique({ where: { id } });
     if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
-    if (item.userId !== user.id) { res.status(403).json({ error: '본인의 item만 삭제할 수 있습니다.' }); return; }
+    if (item.userId !== user.id && !isSuperAdmin(user.loginid)) {
+      res.status(403).json({ error: '본인의 item만 삭제할 수 있습니다.' }); return;
+    }
 
     await prisma.activityLog.create({
       data: {
