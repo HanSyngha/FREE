@@ -4,6 +4,7 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
 import { authRoutes } from './routes/auth.routes.js';
+import { oauthRoutes } from './routes/oauth.routes.js';
 import { onboardingRoutes } from './routes/onboarding.routes.js';
 import { itemRoutes } from './routes/item.routes.js';
 import { spaceRoutes } from './routes/space.routes.js';
@@ -16,13 +17,13 @@ import { announcementRoutes } from './routes/announcement.routes.js';
 import { syncModelsFromEndpoint } from './services/llm.service.js';
 
 export const prisma = new PrismaClient();
-export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:15004');
+export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '15002');
+const PORT = parseInt(process.env.PORT || '3000');
 
 // CORS
-const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:15001').split(',').map(s => s.trim());
+const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:6090').split(',').map(s => s.trim());
 app.use(cors({ origin: corsOrigins, credentials: true }));
 
 // Body parsing
@@ -35,6 +36,7 @@ app.get('/health', (_req, res) => {
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/auth', oauthRoutes);
 app.use('/onboarding', onboardingRoutes);
 app.use('/items', itemRoutes);
 app.use('/spaces', spaceRoutes);

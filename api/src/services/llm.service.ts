@@ -8,7 +8,7 @@ import { toKSTDateString, parseKSTDate } from '../utils/date.js';
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'free';
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://a2g.samsungds.net:4090';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || '';
 
 interface LLMMessage {
   role: 'system' | 'user' | 'assistant';

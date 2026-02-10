@@ -1,10 +1,10 @@
 # FREE API 레퍼런스
 
-기본 URL: `http://a2g.samsungds.net:15001/api`
+기본 URL: `http://52.78.246.50.nip.io:6090/api`
 
 ## 인증 방식
 
-모든 API는 Samsung SSO 기반 인증을 사용합니다. 요청 헤더에 다음이 필요합니다:
+모든 API는 OAuth 기반 JWT 인증을 사용합니다. 요청 헤더에 다음이 필요합니다:
 
 | 헤더 | 설명 |
 |------|------|
@@ -223,7 +223,7 @@ LLM으로 그룹/파트 이름 정규화. (예: `Agent Enabler` → `AE그룹`)
 
 **사용 예시 (curl):**
 ```bash
-curl -X POST http://a2g.samsungds.net:15001/api/items/external \
+curl -X POST http://52.78.246.50.nip.io:6090/api/items/external \
   -H "Content-Type: application/json" \
   -d '{
     "loginid": "syngha.han",

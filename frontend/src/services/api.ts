@@ -5,7 +5,7 @@ import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || 'http://a2g.samsungds.net:4090';
+const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || '';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,8 +40,6 @@ api.interceptors.response.use(
 
 // ==================== Auth ====================
 export const authApi = {
-  login: (ssoToken: string) =>
-    api.post('/auth/login', {}, { headers: { Authorization: `Bearer ${ssoToken}` } }),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
   logout: () => api.post('/auth/logout'),

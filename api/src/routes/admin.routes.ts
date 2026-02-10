@@ -12,10 +12,10 @@ import { Queue } from 'bullmq';
 function parseRedisUrl(url: string) {
   const cleaned = url.replace('redis://', '');
   const [host, portStr] = cleaned.split(':');
-  return { host: host || 'localhost', port: parseInt(portStr || '15004') };
+  return { host: host || 'localhost', port: parseInt(portStr || '6379') };
 }
 
-const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:15004');
+const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:6379');
 const reportQueue = new Queue('report-generation', {
   connection: { host: redisConfig.host, port: redisConfig.port },
 });
@@ -279,21 +279,21 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
     if (!user) {
       res.status(404).json({
         error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://52.78.246.50.nip.io:6090',
       });
       return;
     }
     if (!user.teamId) {
       res.status(400).json({
         error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://52.78.246.50.nip.io:6090',
       });
       return;
     }
     if (!user.groupId || !user.partId) {
       res.status(400).json({
         error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다. 먼저 웹에서 온보딩을 완료하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
+        link: 'https://52.78.246.50.nip.io:6090',
       });
       return;
     }

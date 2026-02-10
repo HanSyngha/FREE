@@ -21,10 +21,10 @@ function toKSTDateString(date: Date): string {
 function parseRedisUrl(url: string) {
   const cleaned = url.replace('redis://', '');
   const [host, portStr] = cleaned.split(':');
-  return { host: host || 'localhost', port: parseInt(portStr || '15004') };
+  return { host: host || 'localhost', port: parseInt(portStr || '6379') };
 }
 
-const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:15004');
+const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:6379');
 const connection = { host: redisConfig.host, port: redisConfig.port };
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
