@@ -152,17 +152,25 @@ export default function Layout() {
                               </NavLink>
                               {part.users?.map((u: any) => {
                                 const isMe = user?.id === u.id;
-                                const to = isMe ? '/space/personal' : `/space/personal/${u.id}`;
+                                if (isMe) {
+                                  return (
+                                    <div key={u.id}
+                                      onClick={() => navigate('/space/personal')}
+                                      className="block pl-14 pr-3 py-1 rounded-lg text-[11px] text-primary-500 hover:bg-primary-50 cursor-pointer transition-colors"
+                                    >
+                                      {u.username}
+                                      <span className="ml-1 text-[10px] text-primary-300">나</span>
+                                    </div>
+                                  );
+                                }
                                 return (
-                                  <NavLink key={u.id} to={to} className={({ isActive }) =>
+                                  <NavLink key={u.id} to={`/space/personal/${u.id}`} className={({ isActive }) =>
                                     `block pl-14 pr-3 py-1 rounded-lg text-[11px] transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
                                       isActive ? 'bg-primary-50 text-primary-600 font-medium'
-                                        : isMe ? 'text-primary-500 hover:bg-primary-50'
                                         : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
                                     }`
                                   }>
                                     {u.username}
-                                    {isMe && <span className="ml-1 text-[10px] text-primary-300">나</span>}
                                   </NavLink>
                                 );
                               })}
