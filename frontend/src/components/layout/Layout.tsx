@@ -139,16 +139,34 @@ export default function Layout() {
                         {group.parts?.map((part: any) => {
                           const isMyPart = user?.partId === part.id;
                           return (
-                            <NavLink key={part.id} to={`/space/part/${part.id}`} className={({ isActive }) =>
-                              `block pl-10 pr-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                                isActive ? 'bg-primary-50 text-primary-600 font-medium'
-                                  : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
-                                  : 'text-gray-500 hover:bg-gray-50'
-                              }`
-                            }>
-                              {part.name}
-                              {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
-                            </NavLink>
+                            <div key={part.id}>
+                              <NavLink to={`/space/part/${part.id}`} className={({ isActive }) =>
+                                `block pl-10 pr-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                                  isActive ? 'bg-primary-50 text-primary-600 font-medium'
+                                    : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
+                                    : 'text-gray-500 hover:bg-gray-50'
+                                }`
+                              }>
+                                {part.name}
+                                {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
+                              </NavLink>
+                              {part.users?.map((u: any) => {
+                                const isMe = user?.id === u.id;
+                                const to = isMe ? '/space/personal' : `/space/personal/${u.id}`;
+                                return (
+                                  <NavLink key={u.id} to={to} className={({ isActive }) =>
+                                    `block pl-14 pr-3 py-1 rounded-lg text-[11px] transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                                      isActive ? 'bg-primary-50 text-primary-600 font-medium'
+                                        : isMe ? 'text-primary-500 hover:bg-primary-50'
+                                        : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                                    }`
+                                  }>
+                                    {u.username}
+                                    {isMe && <span className="ml-1 text-[10px] text-primary-300">나</span>}
+                                  </NavLink>
+                                );
+                              })}
+                            </div>
                           );
                         })}
                       </div>

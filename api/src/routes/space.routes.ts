@@ -217,8 +217,17 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
       where: { id: user.teamId },
       include: {
         groups: {
+          orderBy: { name: 'asc' },
           include: {
-            parts: true,
+            parts: {
+              orderBy: { name: 'asc' },
+              include: {
+                users: {
+                  select: { id: true, username: true, loginid: true },
+                  orderBy: { username: 'asc' },
+                },
+              },
+            },
           },
         },
       },
