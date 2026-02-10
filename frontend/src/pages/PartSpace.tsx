@@ -2,7 +2,7 @@
  * Part Space Page
  */
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { spacesApi, reportsApi } from '../services/api';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -14,6 +14,7 @@ function formatDateWithDay(iso: string) {
 
 export default function PartSpace() {
   const { partId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,10 +62,10 @@ export default function PartSpace() {
           {data.reports.map((report: any) => (
             <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
-                <a href={`/report/${report.id}`} target="_blank" rel="noopener noreferrer"
-                  className="text-sm font-medium text-primary-600 hover:underline">
+                <span onClick={() => navigate(`/report/${report.id}`)}
+                  className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
                   {data.part?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
-                </a>
+                </span>
                 <div className="flex gap-2">
                   <button onClick={() => handleExport(report.id, 'docx')}
                     className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
@@ -93,7 +94,7 @@ export default function PartSpace() {
                 <h3 className="text-xs font-medium text-gray-600 mb-2 px-1 cursor-pointer hover:text-primary-600"
                   onClick={() => {
                     const userItem = (userItems as any[])[0];
-                    if (userItem?.user?.id) window.open(`/space/personal/${userItem.user.id}`, '_blank');
+                    if (userItem?.user?.id) navigate(`/space/personal/${userItem.user.id}`);
                   }}>
                   {userName}
                 </h3>
@@ -101,7 +102,7 @@ export default function PartSpace() {
                   {(userItems as any[]).map((item: any) => (
                     <div key={item.id}
                       className="px-3 py-2 bg-white rounded-lg border border-gray-100 hover:border-primary-200 hover:bg-primary-50/30 cursor-pointer transition-colors"
-                      onClick={() => window.open(`/space/personal/${item.user?.id}/${dateKey}`, '_blank')}
+                      onClick={() => navigate(`/space/personal/${item.user?.id}/${dateKey}`)}
                     >
                       <span className="text-sm text-gray-700">{item.title}</span>
                     </div>

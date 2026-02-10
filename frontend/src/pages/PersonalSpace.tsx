@@ -2,7 +2,7 @@
  * Personal Space Page - 개인 Space
  */
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { spacesApi, itemsApi, ratingApi, reportsApi, profileApi } from '../services/api';
 import ItemBlock from '../components/common/ItemBlock';
@@ -41,6 +41,7 @@ interface Preferences {
 }
 
 export default function PersonalSpace() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [items, setItems] = useState<Item[]>([]);
   const [reports, setReports] = useState<any[]>([]);
@@ -277,10 +278,10 @@ export default function PersonalSpace() {
           reports.map((report: any, idx: number) => (
             <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
-                <a href={`/report/${report.id}`} target="_blank" rel="noopener noreferrer"
-                  className="text-sm font-medium text-primary-600 hover:underline">
+                <span onClick={() => navigate(`/report/${report.id}`)}
+                  className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
                   {getReportLabel(report, idx)}
-                </a>
+                </span>
                 <div className="flex gap-2">
                   <button onClick={() => handleExportReport(report.id, 'docx')}
                     className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
