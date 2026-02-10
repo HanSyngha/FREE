@@ -3,23 +3,35 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { spacesApi } from '../services/api';
+import { useAuthStore } from '../stores/authStore';
+import { spacesApi, itemsApi } from '../services/api';
 import ItemBlock from '../components/common/ItemBlock';
 
 export default function PersonalSpaceOther() {
   const { userId, date } = useParams();
+  const { isSuperAdmin } = useAuthStore();
   const [items, setItems] = useState<any[]>([]);
   const [targetUser, setTargetUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const dateRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchItems = () => {
     if (!userId) return;
     spacesApi.getPersonalUser(userId).then(res => {
       setItems(res.data.items);
       setTargetUser(res.data.user);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [userId]);
+  };
+
+  useEffect(() => { fetchItems(); }, [userId]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+    try {
+      await itemsApi.delete(id);
+      fetchItems();
+    } catch {}
+  };
 
   // 날짜 URL param에 해당하는 섹션으로 자동 스크롤
   useEffect(() => {
@@ -57,7 +69,9 @@ export default function PersonalSpaceOther() {
             <h2 className="text-sm font-semibold text-gray-500 mb-3">{dateKey}</h2>
             <div className="space-y-3">
               {groupedItems[dateKey].map((item: any) => (
-                <ItemBlock key={item.id} item={item} editable={false} />
+                <ItemBlock key={item.id} item={item} editable={false}
+                  deletable={isSuperAdmin}
+                  onDelete={() => handleDelete(item.id)} />
               ))}
             </div>
           </div>
