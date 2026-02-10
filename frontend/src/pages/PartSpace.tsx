@@ -17,6 +17,7 @@ export default function PartSpace() {
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showOlderReports, setShowOlderReports] = useState(false);
 
   useEffect(() => {
     if (!partId) return;
@@ -59,26 +60,63 @@ export default function PartSpace() {
       {data.reports?.length > 0 && (
         <div className="mb-6">
           <h2 className="text-sm font-semibold text-gray-500 mb-3">주간 보고서</h2>
-          {data.reports.map((report: any) => (
-            <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span onClick={() => navigate(`/report/${report.id}`)}
-                  className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
-                  {data.part?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
-                </span>
-                <div className="flex gap-2">
-                  <button onClick={() => handleExport(report.id, 'docx')}
-                    className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
-                  <button onClick={() => handleExport(report.id, 'xlsx')}
-                    className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+          {(() => {
+            const latest = data.reports[0];
+            const older = data.reports.slice(1);
+            return (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span onClick={() => navigate(`/report/${latest.id}`)}
+                      className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
+                      {data.part?.name} 보고서 {formatDateWithDay(latest.periodStart)} ~ {formatDateWithDay(latest.periodEnd)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleExport(latest.id, 'docx')}
+                        className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                      <button onClick={() => handleExport(latest.id, 'xlsx')}
+                        className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR')}</span>
+                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR')}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
-                <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
-              </div>
-            </div>
-          ))}
+                {older.length > 0 && (
+                  <>
+                    <button onClick={() => setShowOlderReports(!showOlderReports)}
+                      className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
+                      <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      이전 보고서 ({older.length})
+                    </button>
+                    {showOlderReports && older.map((report: any) => (
+                      <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span onClick={() => navigate(`/report/${report.id}`)}
+                            className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
+                            {data.part?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
+                          </span>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleExport(report.id, 'docx')}
+                              className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                            <button onClick={() => handleExport(report.id, 'xlsx')}
+                              className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
+                          <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
