@@ -138,6 +138,117 @@ itemRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, asy
   }
 });
 
+// GET /items/external - 인증 없이 loginid로 오늘의 업무 목록 조회
+itemRoutes.get('/external', async (req, res) => {
+  try {
+    const loginid = req.query.loginid as string;
+    if (!loginid || typeof loginid !== 'string') {
+      res.status(400).json({ error: 'loginid는 필수입니다.' }); return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { loginid } });
+    if (!user) {
+      res.status(404).json({
+        error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
+        link: 'http://a2g.samsungds.net:15001',
+      });
+      return;
+    }
+
+    // 날짜 결정 (기본: 오늘 KST)
+    const dateStr = (req.query.date as string) || getKSTTodayString();
+    const targetDate = parseKSTDate(dateStr);
+    if (isNaN(targetDate.getTime())) {
+      res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' }); return;
+    }
+
+    // 해당 날짜의 items 조회
+    const nextDate = new Date(targetDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    const items = await prisma.item.findMany({
+      where: {
+        userId: user.id,
+        date: { gte: targetDate, lt: nextDate },
+      },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        date: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      items,
+      count: items.length,
+      date: dateStr,
+    });
+  } catch (error) {
+    console.error('External get items error:', error);
+    res.status(500).json({ error: '업무 목록 조회에 실패했습니다.' });
+  }
+});
+
+// PUT /items/external/:id - 인증 없이 loginid로 개별 item 수정
+itemRoutes.put('/external/:id', async (req, res) => {
+  try {
+    const { loginid, title, content } = req.body;
+    const itemId = req.params.id as string;
+
+    if (!loginid || typeof loginid !== 'string') {
+      res.status(400).json({ error: 'loginid는 필수입니다.' }); return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { loginid } });
+    if (!user) {
+      res.status(404).json({
+        error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
+        link: 'http://a2g.samsungds.net:15001',
+      });
+      return;
+    }
+
+    const item = await prisma.item.findUnique({ where: { id: itemId } });
+    if (!item) {
+      res.status(404).json({ error: 'Item not found' }); return;
+    }
+    if (item.userId !== user.id) {
+      res.status(403).json({ error: '본인의 item만 수정할 수 있습니다.' }); return;
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (title !== undefined) updateData.title = String(title).slice(0, 500);
+    if (content !== undefined) updateData.content = String(content).slice(0, 10000);
+
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: '수정할 항목(title 또는 content)이 필요합니다.' }); return;
+    }
+
+    const updated = await prisma.item.update({ where: { id: itemId }, data: updateData });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: 'UPDATE_ITEM',
+        targetType: 'ITEM',
+        targetId: itemId,
+        details: `[External] ${updated.title}`,
+      },
+    });
+
+    console.log(`[External] Item ${itemId} updated for ${loginid}`);
+    res.json({ success: true, item: updated });
+  } catch (error) {
+    console.error('External update item error:', error);
+    res.status(500).json({ error: '업무 항목 수정에 실패했습니다.' });
+  }
+});
+
 // PUT /items/:id - Item 수정
 itemRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
