@@ -202,10 +202,18 @@ onboardingRoutes.post('/normalize-name', authenticateToken, loadUser, llmLimit, 
     const { name } = req.body;
     if (!name) { res.status(400).json({ error: 'name is required' }); return; }
 
+    const user = req.user!;
     const normalized = await normalizeNameWithLLM(name, {
-      loginid: req.user!.loginid,
-      username: req.user!.username,
-      deptname: req.user!.deptname,
+      loginid: user.loginid,
+      username: user.username,
+      deptname: user.deptname,
+    });
+
+    console.log('[Onboarding] 이름 정규화:', {
+      user: `${user.username}(${user.loginid})`,
+      dept: user.deptname,
+      input: name,
+      result: normalized,
     });
 
     res.json({ original: name, normalized });
