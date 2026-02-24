@@ -4,8 +4,6 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
-import { normalizeNameWithLLM } from '../services/llm.service.js';
-import { llmLimit } from '../middleware/rateLimit.js';
 
 export const onboardingRoutes = Router();
 
@@ -196,21 +194,3 @@ onboardingRoutes.post('/setup', authenticateToken, loadUser, async (req: Authent
   }
 });
 
-// POST /onboarding/normalize-name - LLM 이름 정규화
-onboardingRoutes.post('/normalize-name', authenticateToken, loadUser, llmLimit, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) { res.status(400).json({ error: 'name is required' }); return; }
-
-    const normalized = await normalizeNameWithLLM(name, {
-      loginid: req.user!.loginid,
-      username: req.user!.username,
-      deptname: req.user!.deptname,
-    });
-
-    res.json({ original: name, normalized });
-  } catch (error) {
-    console.error('Normalize name error:', error);
-    res.status(500).json({ error: '이름 정규화에 실패했습니다.' });
-  }
-});
