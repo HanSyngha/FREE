@@ -469,13 +469,9 @@ async function generateTeamReportWorker(
 async function cleanupExpiredData() {
   const now = new Date();
 
-  // 30일 경과 Item 삭제
+  // Item(업무 기록)은 개인이 직접 삭제하기 전까지 영구 보관
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const deletedItems = await prisma.item.deleteMany({
-    where: { date: { lt: thirtyDaysAgo } },
-  });
-  console.log(`[Cleanup] Deleted ${deletedItems.count} expired items`);
 
   // 7일 경과 Report 삭제
   const deletedReports = await prisma.report.deleteMany({
