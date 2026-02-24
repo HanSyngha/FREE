@@ -170,7 +170,7 @@ worklogRoutes.get('/external', async (req, res) => {
     if (!user) {
       res.status(404).json({
         error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
-        link: 'https://52.78.246.50.nip.io:6090',
+        link: 'http://a2g.samsungds.net:15001',
       });
       return;
     }
@@ -211,7 +211,7 @@ worklogRoutes.put('/external/:id', async (req, res) => {
     if (!user) {
       res.status(404).json({
         error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
-        link: 'https://52.78.246.50.nip.io:6090',
+        link: 'http://a2g.samsungds.net:15001',
       });
       return;
     }
@@ -308,11 +308,11 @@ worklogRoutes.post('/external', async (req, res) => {
 
     const user = await prisma.user.findUnique({ where: { loginid } });
     if (!user) {
-      res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`, link: 'https://52.78.246.50.nip.io:6090' });
+      res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`, link: 'http://a2g.samsungds.net:15001' });
       return;
     }
-    if (!user.teamId) { res.status(400).json({ error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다.`, link: 'https://52.78.246.50.nip.io:6090' }); return; }
-    if (!user.groupId || !user.partId) { res.status(400).json({ error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다.`, link: 'https://52.78.246.50.nip.io:6090' }); return; }
+    if (!user.teamId) { res.status(400).json({ error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다.`, link: 'http://a2g.samsungds.net:15001' }); return; }
+    if (!user.groupId || !user.partId) { res.status(400).json({ error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다.`, link: 'http://a2g.samsungds.net:15001' }); return; }
 
     const personalSpace = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
     if (!personalSpace) { res.status(500).json({ error: `사용자(${loginid})의 개인 공간이 없습니다.` }); return; }
@@ -346,7 +346,7 @@ worklogRoutes.post('/external', async (req, res) => {
       return results;
     });
 
-    res.json({ success: true, items: createdItems, count: createdItems.length, message: `${createdItems.length}건의 업무가 추가되었습니다.`, link: 'https://52.78.246.50.nip.io:6090' });
+    res.json({ success: true, items: createdItems, count: createdItems.length, message: `${createdItems.length}건의 업무가 추가되었습니다.`, link: 'http://a2g.samsungds.net:15001' });
   } catch (error) {
     console.error('External create worklogs error:', error);
     res.status(500).json({ error: '업무 항목 생성에 실패했습니다.' });

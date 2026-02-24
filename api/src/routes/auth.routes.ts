@@ -22,24 +22,35 @@ function safeDecodeURIComponent(text: string): string {
  * 사용자 및 Space 초기화
  */
 async function initializeUserAndSpaces(loginid: string, username: string, deptname: string) {
-  const businessUnit = extractBusinessUnit(deptname);
+  const businessUnitName = extractBusinessUnit(deptname);
   const teamName = extractTeamName(deptname);
 
   // 1. User upsert
   const user = await prisma.user.upsert({
     where: { loginid },
-    update: { deptname, username, businessUnit, lastActive: new Date() },
-    create: { loginid, deptname, username, businessUnit },
+    update: { deptname, username, businessUnit: businessUnitName, lastActive: new Date() },
+    create: { loginid, deptname, username, businessUnit: businessUnitName },
   });
 
-  // 2. Team 조회/생성
+  // 2. BusinessUnit 조회/생성
+  let bu = await prisma.businessUnit.findUnique({ where: { name: businessUnitName } });
+  if (!bu) {
+    bu = await prisma.businessUnit.create({ data: { name: businessUnitName } });
+    // BU Space 생성
+    const existingBuSpace = await prisma.space.findFirst({ where: { type: 'BU', ownerId: bu.id } });
+    if (!existingBuSpace) {
+      await prisma.space.create({ data: { type: 'BU', ownerId: bu.id } });
+    }
+  }
+
+  // 3. Team 조회/생성
   let team = await prisma.team.findUnique({
-    where: { name_businessUnit: { name: teamName, businessUnit } },
+    where: { name_businessUnitId: { name: teamName, businessUnitId: bu.id } },
   });
 
   if (!team) {
     team = await prisma.team.create({
-      data: { name: teamName, businessUnit },
+      data: { name: teamName, businessUnitId: bu.id },
     });
     // Team Space 생성
     await prisma.space.create({
@@ -77,7 +88,8 @@ async function initializeUserAndSpaces(loginid: string, username: string, deptna
   return {
     user: {
       id: user.id, loginid: user.loginid, username: user.username,
-      deptname: user.deptname, businessUnit,
+      deptname: user.deptname, businessUnit: businessUnitName,
+      businessUnitId: bu.id, businessUnitName: businessUnitName,
       teamId: team.id, groupId: user.groupId, partId: user.partId,
       teamName, groupName: group?.name || null, partName: part?.name || null,
     },

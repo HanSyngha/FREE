@@ -11,20 +11,15 @@ model User {
   id           String    @id @default(uuid())
   loginid      String    @unique
   username     String
-  deptname     String    @default("")
-  businessUnit String    @default("")
+  deptname     String
+  businessUnit String
   teamId       String?
   groupId      String?
   partId       String?
   requestCount Int       @default(0)
-  preferences  Json?
+  preferences  Json?     // { tone?, language?, emphasis?, customInstructions? }
   createdAt    DateTime  @default(now())
   lastActive   DateTime  @default(now())
-
-  provider     String    @default("")
-  providerId   String    @default("")
-  email        String?
-  profileImage String?
 
   team         Team?     @relation(fields: [teamId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])
@@ -38,17 +33,7 @@ model User {
   activityLogs ActivityLog[]
   announcements Announcement[]
 
-  @@unique([provider, providerId])
-  @@index([email])
   @@map("users")
-}
-
-model Admin {
-  id    String @id @default(uuid())
-  email String @unique
-  role  String @default("SUPER_ADMIN")
-
-  @@map("admins")
 }
 
 model BusinessUnit {
@@ -132,6 +117,7 @@ enum SpaceType {
   BU
 }
 
+// 기존 Item -> WorkLog (업무 기록)
 model WorkLog {
   id           String   @id @default(uuid())
   userId       String
@@ -140,7 +126,7 @@ model WorkLog {
   content      String
   link         String?
   date         DateTime @db.Date
-  linkedItemId String?
+  linkedItemId String?  // 파트 Item(목표)에 LLM 자동 연결
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -153,6 +139,7 @@ model WorkLog {
   @@map("work_logs")
 }
 
+// 조직 목표
 model Item {
   id           String     @id @default(uuid())
   title        String
@@ -160,11 +147,11 @@ model Item {
   status       ItemStatus @default(PLANNED)
   startDate    DateTime?  @db.Date
   endDate      DateTime?  @db.Date
-  progress     Int        @default(0)
-  summary      String?
+  progress     Int        @default(0) // 0-100
+  summary      String?    // LLM 자동 진척사항
   level        OrgLevel
-  ownerId      String
-  parentItemId String?
+  ownerId      String     // teamId / groupId / partId
+  parentItemId String?    // 상위 Item FK
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -192,6 +179,7 @@ enum OrgLevel {
   PART
 }
 
+// 개인 할일
 model Todo {
   id           String    @id @default(uuid())
   userId       String
@@ -202,7 +190,7 @@ model Todo {
   endDate      DateTime? @db.Date
   completed    Boolean   @default(false)
   completedAt  DateTime?
-  linkedItemId String?
+  linkedItemId String?   // 파트 Item에 LLM 자동 연결
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -216,11 +204,12 @@ model Todo {
   @@map("todos")
 }
 
+// 조직 관리 권한
 model OrgAdmin {
   id        String   @id @default(uuid())
   userId    String
   level     OrgLevel
-  targetId  String
+  targetId  String   // teamId / groupId / partId
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
@@ -235,7 +224,7 @@ model Report {
   type             ReportType
   byMemberContent  String
   byItemContent    String
-  progressContent  String?
+  progressContent  String?    // 목표 진행률 섹션
   periodStart      DateTime   @db.Date
   periodEnd        DateTime   @db.Date
   createdAt        DateTime   @default(now())
