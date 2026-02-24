@@ -34,6 +34,14 @@ export interface AuthenticatedRequest extends Request {
   isSuperAdmin?: boolean;
   isTeamAdmin?: boolean;
   teamAdminTeamIds?: string[];
+  orgAdminLevels?: Array<{ level: string; targetId: string }>;
+}
+
+export interface VisibleScope {
+  level: 'SUPER' | 'TEAM' | 'GROUP' | 'PART' | 'PERSONAL';
+  teamId?: string;
+  groupId?: string;
+  partId?: string;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'free-jwt-secret-change-in-production';
@@ -192,4 +200,108 @@ export async function loadUser(req: AuthenticatedRequest, res: Response, next: N
   } catch {
     res.status(500).json({ error: 'Failed to load user' });
   }
+}
+
+/**
+ * OrgAdmin 권한 체크 미들웨어
+ * 상위 레벨 권한도 하위 레벨 접근 허용 (TEAM > GROUP > PART)
+ * SuperAdmin / TeamAdmin은 항상 통과
+ */
+export function requireOrgAdmin(level: string, targetIdParam: string) {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+
+    const user = await prisma.user.findUnique({
+      where: { loginid: req.user.loginid },
+      include: { teamAdmins: { select: { teamId: true } } },
+    });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    req.userId = user.id;
+    req.dbUser = user;
+
+    // SuperAdmin은 항상 통과
+    if (isSuperAdmin(req.user.loginid)) { req.isSuperAdmin = true; next(); return; }
+    if (user.email) {
+      const { isAdmin } = await checkAdminStatus(user.email);
+      if (isAdmin) { req.isSuperAdmin = true; next(); return; }
+    }
+
+    // TeamAdmin은 항상 통과
+    if (user.teamAdmins.length > 0) {
+      req.isTeamAdmin = true;
+      req.teamAdminTeamIds = user.teamAdmins.map(ta => ta.teamId);
+      next();
+      return;
+    }
+
+    // OrgAdmin 체크
+    const targetId = req.params[targetIdParam] || req.body[targetIdParam];
+    if (!targetId) { res.status(400).json({ error: 'targetId is required' }); return; }
+
+    const orgAdmins = await prisma.orgAdmin.findMany({
+      where: { userId: user.id },
+    });
+
+    const levelHierarchy: Record<string, number> = { TEAM: 3, GROUP: 2, PART: 1 };
+    const requiredLevel = levelHierarchy[level] || 0;
+
+    // 직접 매칭 또는 상위 레벨 권한 보유 시 통과
+    const hasAccess = orgAdmins.some(oa => {
+      const oaLevel = levelHierarchy[oa.level] || 0;
+      if (oaLevel >= requiredLevel && oa.targetId === targetId) return true;
+      // 상위 레벨이면 하위도 접근 가능 (같은 조직 내)
+      if (oaLevel > requiredLevel) return true;
+      return false;
+    });
+
+    if (hasAccess) {
+      req.orgAdminLevels = orgAdmins.map(oa => ({ level: oa.level, targetId: oa.targetId }));
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: '조직 관리 권한이 필요합니다.' });
+  };
+}
+
+/**
+ * 사용자의 열람 가능 범위 반환
+ */
+export async function getVisibleScope(userId: string): Promise<VisibleScope> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      teamAdmins: { select: { teamId: true } },
+      orgAdmins: true,
+    },
+  });
+  if (!user) return { level: 'PERSONAL' };
+
+  // SuperAdmin → 전체
+  if (isSuperAdmin(user.loginid)) return { level: 'SUPER' };
+  if (user.email) {
+    const { isAdmin } = await checkAdminStatus(user.email);
+    if (isAdmin) return { level: 'SUPER' };
+  }
+
+  // TeamAdmin → 사업부 내 모든 기록
+  if (user.teamAdmins.length > 0) {
+    return { level: 'TEAM', teamId: user.teamId || undefined };
+  }
+
+  // OrgAdmin 중 최상위 레벨 반환
+  if (user.orgAdmins && user.orgAdmins.length > 0) {
+    const levelOrder: Record<string, number> = { TEAM: 3, GROUP: 2, PART: 1 };
+    const highest = user.orgAdmins.reduce((max, oa) =>
+      (levelOrder[oa.level] || 0) > (levelOrder[max.level] || 0) ? oa : max
+    );
+    if (highest.level === 'TEAM') return { level: 'TEAM', teamId: highest.targetId };
+    if (highest.level === 'GROUP') return { level: 'GROUP', groupId: highest.targetId };
+    if (highest.level === 'PART') return { level: 'PART', partId: highest.targetId };
+  }
+
+  // 일반 사용자 → 파트 내 기록
+  if (user.partId) return { level: 'PART', partId: user.partId };
+  return { level: 'PERSONAL' };
 }

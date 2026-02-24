@@ -3,14 +3,14 @@
  */
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { adminApi } from '../services/api';
+import { adminApi, orgAdminApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function SuperAdmin() {
   const { isSuperAdmin } = useAuthStore();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'llm' | 'teams' | 'reports'>('llm');
+  const [tab, setTab] = useState<'llm' | 'teams' | 'reports' | 'orgadmin'>('llm');
 
   // LLM State
   const [endpoint, setEndpoint] = useState('');
@@ -24,6 +24,10 @@ export default function SuperAdmin() {
   const [reportTeamId, setReportTeamId] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // OrgAdmin State
+  const [orgAdmins, setOrgAdmins] = useState<any[]>([]);
+  const [orgAdminForm, setOrgAdminForm] = useState({ userId: '', level: 'PART', targetId: '' });
 
   // Teams State
   const [teams, setTeams] = useState<any[]>([]);
@@ -116,6 +120,28 @@ export default function SuperAdmin() {
     }
   };
 
+  const fetchOrgAdmins = () => {
+    orgAdminApi.getAll().then(res => setOrgAdmins(res.data.orgAdmins || [])).catch(() => {});
+  };
+
+  const handleAddOrgAdmin = async () => {
+    const { userId, level, targetId } = orgAdminForm;
+    if (!userId || !targetId) return;
+    try {
+      await orgAdminApi.create(userId, level, targetId);
+      setOrgAdminForm({ userId: '', level: 'PART', targetId: '' });
+      fetchOrgAdmins();
+    } catch (err: any) { alert(err.response?.data?.error || '조직 권한 추가에 실패했습니다.'); }
+  };
+
+  const handleRemoveOrgAdmin = async (id: string) => {
+    if (!confirm('이 조직 권한을 해제하시겠습니까?')) return;
+    try {
+      await orgAdminApi.delete(id);
+      fetchOrgAdmins();
+    } catch { alert('권한 해제에 실패했습니다.'); }
+  };
+
   const businessUnits = [...new Set(teams.map(t => t.businessUnit).filter(Boolean))].sort();
   const filteredTeams = filterBU ? teams.filter(t => t.businessUnit === filterBU) : teams;
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -137,6 +163,10 @@ export default function SuperAdmin() {
         <button onClick={() => setTab('reports')} role="tab" aria-selected={tab === 'reports'} aria-controls="panel-reports"
           className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'reports' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           보고서 생성
+        </button>
+        <button onClick={() => { setTab('orgadmin'); if (orgAdmins.length === 0) fetchOrgAdmins(); }} role="tab" aria-selected={tab === 'orgadmin'} aria-controls="panel-orgadmin"
+          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'orgadmin' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          조직 권한
         </button>
       </div>
 
@@ -357,6 +387,75 @@ export default function SuperAdmin() {
             <p className="text-xs text-amber-700">
               <strong>참고:</strong> 보고서 생성은 Worker 프로세스에서 비동기로 처리됩니다.
               생성 완료까지 팀 규모에 따라 시간이 걸릴 수 있으며, 진행 상황은 Worker 로그에서 확인할 수 있습니다.
+            </p>
+          </div>
+        </div>
+      )}
+      {/* OrgAdmin Tab */}
+      {tab === 'orgadmin' && (
+        <div id="panel-orgadmin" role="tabpanel" aria-labelledby="tab-orgadmin" className="space-y-6">
+          {/* 조직 권한 추가 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-sm font-bold text-gray-700 mb-4">조직 관리 권한 추가</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">사용자 ID</label>
+                <input value={orgAdminForm.userId} onChange={(e) => setOrgAdminForm(f => ({ ...f, userId: e.target.value }))}
+                  placeholder="사용자 ID" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">권한 레벨</label>
+                <select value={orgAdminForm.level} onChange={(e) => setOrgAdminForm(f => ({ ...f, level: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="PART">파트 (PART)</option>
+                  <option value="GROUP">그룹 (GROUP)</option>
+                  <option value="TEAM">팀 (TEAM)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">대상 ID</label>
+                <input value={orgAdminForm.targetId} onChange={(e) => setOrgAdminForm(f => ({ ...f, targetId: e.target.value }))}
+                  placeholder="팀/그룹/파트 ID" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div className="flex items-end">
+                <button onClick={handleAddOrgAdmin} disabled={!orgAdminForm.userId || !orgAdminForm.targetId}
+                  className="w-full px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700">
+                  권한 추가
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 조직 권한 목록 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-sm font-bold text-gray-700 mb-4">현재 조직 권한 ({orgAdmins.length})</h2>
+            {orgAdmins.length === 0 ? (
+              <p className="text-sm text-gray-400">등록된 조직 권한이 없습니다</p>
+            ) : (
+              <div className="space-y-2">
+                {orgAdmins.map((oa: any) => (
+                  <div key={oa.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                        oa.level === 'TEAM' ? 'bg-purple-100 text-purple-700' :
+                        oa.level === 'GROUP' ? 'bg-blue-100 text-blue-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>{oa.level}</span>
+                      <span className="text-sm font-medium text-gray-700">{oa.user?.username || oa.userId}</span>
+                      <span className="text-xs text-gray-400">→ {oa.targetId}</span>
+                    </div>
+                    <button onClick={() => handleRemoveOrgAdmin(oa.id)}
+                      className="text-xs text-red-500 hover:text-red-700">해제</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-xs text-amber-700">
+              <strong>권한 설명:</strong> PART 권한은 파트 목표 관리, GROUP 권한은 그룹 목표 관리, TEAM 권한은 팀 목표 관리를 할 수 있습니다.
+              상위 레벨 권한은 하위 레벨도 포함합니다.
             </p>
           </div>
         </div>
