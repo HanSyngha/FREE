@@ -6,6 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser, requireGoalEdit } from '../middleware/auth.js';
 import { llmLimit } from '../middleware/rateLimit.js';
 import { parseGoalsWithLLM, autoMapNewGoal, autoMapTodosAndWorkLogs } from '../services/llm.service.js';
+import { parseDateForDB } from '../utils/date.js';
 
 export const goalRoutes = Router();
 
@@ -70,8 +71,8 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
           title: goal.title,
           content: goal.content || '',
           status: (goal.status as any) || 'PLANNED',
-          startDate: goal.startDate ? new Date(goal.startDate) : null,
-          endDate: goal.endDate ? new Date(goal.endDate) : null,
+          startDate: goal.startDate ? parseDateForDB(goal.startDate) : null,
+          endDate: goal.endDate ? parseDateForDB(goal.endDate) : null,
           level: level as any,
           ownerId,
           parentItemId,
@@ -259,8 +260,8 @@ goalRoutes.put('/:id', authenticateToken, loadUser, requireGoalEdit(), async (re
     if (title !== undefined) updateData.title = String(title).slice(0, 500);
     if (content !== undefined) updateData.content = String(content).slice(0, 10000);
     if (status !== undefined && ['PLANNED', 'IN_PROGRESS', 'COMPLETED'].includes(status)) updateData.status = status;
-    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
-    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
+    if (startDate !== undefined) updateData.startDate = startDate ? parseDateForDB(startDate) : null;
+    if (endDate !== undefined) updateData.endDate = endDate ? parseDateForDB(endDate) : null;
     if (progress !== undefined) updateData.progress = Math.max(0, Math.min(100, Number(progress)));
     if (summary !== undefined) updateData.summary = summary;
 

@@ -6,7 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser, isSuperAdmin } from '../middleware/auth.js';
 import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
 import { parseTextWithLLM } from '../services/llm.service.js';
-import { getKSTTodayString, getKSTMidnight, parseKSTDate } from '../utils/date.js';
+import { getKSTTodayString, getKSTMidnight, parseKSTDate, parseDateForDB, getKSTTodayForDB } from '../utils/date.js';
 
 export const worklogRoutes = Router();
 
@@ -104,7 +104,7 @@ worklogRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, 
             spaceId: personalSpace.id,
             title: wl.title,
             content: wl.content,
-            date: parseKSTDate(wl.date),
+            date: parseDateForDB(wl.date),
             linkedItemId: wl.linkedItemId || null,
           },
         })
@@ -119,7 +119,7 @@ worklogRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, 
             userId: user.id,
             spaceId: personalSpace.id,
             title: todo.title,
-            endDate: todo.endDate ? parseKSTDate(todo.endDate) : null,
+            endDate: todo.endDate ? parseDateForDB(todo.endDate) : null,
             linkedItemId: todo.linkedItemId || null,
           },
         })
@@ -176,7 +176,7 @@ worklogRoutes.get('/external', async (req, res) => {
     }
 
     const dateStr = (req.query.date as string) || getKSTTodayString();
-    const targetDate = parseKSTDate(dateStr);
+    const targetDate = parseDateForDB(dateStr);
     if (isNaN(targetDate.getTime())) {
       res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' }); return;
     }
@@ -273,13 +273,13 @@ worklogRoutes.put('/:id', authenticateToken, loadUser, async (req: Authenticated
       }
     }
     if (date !== undefined) {
-      const newDate = parseKSTDate(date);
-      if (isNaN(newDate.getTime())) { res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' }); return; }
+      const validDate = parseKSTDate(date);
+      if (isNaN(validDate.getTime())) { res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' }); return; }
       const todayMidnight = getKSTMidnight();
       const minDate = new Date(todayMidnight);
       minDate.setDate(minDate.getDate() - 29);
-      if (newDate > todayMidnight || newDate < minDate) { res.status(400).json({ error: '유효하지 않은 날짜입니다.' }); return; }
-      updateData.date = newDate;
+      if (validDate > todayMidnight || validDate < minDate) { res.status(400).json({ error: '유효하지 않은 날짜입니다.' }); return; }
+      updateData.date = parseDateForDB(date);
     }
     if (linkedItemId !== undefined) {
       updateData.linkedItemId = linkedItemId || null;
@@ -317,9 +317,9 @@ worklogRoutes.post('/external', async (req, res) => {
     const personalSpace = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
     if (!personalSpace) { res.status(500).json({ error: `사용자(${loginid})의 개인 공간이 없습니다.` }); return; }
 
-    const todayDate = getKSTMidnight();
-    const minDate = new Date(todayDate);
-    minDate.setDate(minDate.getDate() - 29);
+    const todayKST = getKSTMidnight();
+    const minKST = new Date(todayKST);
+    minKST.setDate(minKST.getDate() - 29);
 
     for (const item of items) {
       if (!item || typeof item !== 'object') { res.status(400).json({ error: 'items 배열의 각 요소는 객체여야 합니다.' }); return; }
@@ -327,14 +327,14 @@ worklogRoutes.post('/external', async (req, res) => {
       if (item.date) {
         const d = parseKSTDate(item.date);
         if (isNaN(d.getTime())) { res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` }); return; }
-        if (d > todayDate || d < minDate) { res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date} (29일 전 ~ 오늘)` }); return; }
+        if (d > todayKST || d < minKST) { res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date} (29일 전 ~ 오늘)` }); return; }
       }
     }
 
     const createdItems = await prisma.$transaction(async (tx) => {
       const results = [];
       for (const item of items) {
-        const itemDate = item.date ? parseKSTDate(item.date) : todayDate;
+        const itemDate = item.date ? parseDateForDB(item.date) : getKSTTodayForDB();
         const created = await tx.workLog.create({
           data: { userId: user.id, spaceId: personalSpace.id, title: String(item.title).slice(0, 500), content: String(item.content).slice(0, 10000), date: itemDate },
         });

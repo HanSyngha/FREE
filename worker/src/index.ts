@@ -8,10 +8,17 @@ import { Worker, Queue } from 'bullmq';
 
 const prisma = new PrismaClient();
 
-/** KST 기준 오늘 자정 Date 객체 */
-function getKSTMidnight(): Date {
-  const kstToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-  return new Date(kstToday + 'T00:00:00+09:00');
+/** KST 기준 오늘 날짜 문자열 (YYYY-MM-DD) */
+function getKSTTodayString(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+/** YYYY-MM-DD → UTC midnight Date (@db.Date 필드 저장/쿼리용) */
+function parseDateForDB(dateStr: string): Date {
+  return new Date(dateStr + 'T00:00:00.000Z');
+}
+/** KST 기준 오늘의 UTC midnight Date (@db.Date 필드용) */
+function getKSTTodayForDB(): Date {
+  return parseDateForDB(getKSTTodayString());
 }
 /** Date를 KST 기준 YYYY-MM-DD로 변환 */
 function toKSTDateString(date: Date): string {
@@ -163,7 +170,7 @@ async function generateReportsForTeam(teamId: string, resumeFrom?: string | null
     });
   }
 
-  const periodEnd = getKSTMidnight();
+  const periodEnd = getKSTTodayForDB();
   const periodStart = new Date(periodEnd);
   periodStart.setDate(periodStart.getDate() - 6);
 

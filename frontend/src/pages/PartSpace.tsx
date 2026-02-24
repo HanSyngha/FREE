@@ -118,8 +118,8 @@ export default function PartSpace() {
                     </div>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR')}</span>
-                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR')}</span>
+                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                   </div>
                 </div>
                 {older.length > 0 && (
