@@ -4,10 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, reportsApi, announcementsApi, goalsApi, adminApi } from '../services/api';
+import { spacesApi, reportsApi, announcementsApi, goalsApi, orgApi } from '../services/api';
 import GoalCard from '../components/goal/GoalCard';
 import GoalInputForm from '../components/goal/GoalInputForm';
 import ProgressBar from '../components/common/ProgressBar';
+import OrgChart from '../components/common/OrgChart';
+import type { OrgNode } from '../components/common/OrgChart';
 import DashboardGrid from '../components/spaces/DashboardGrid';
 import DashboardSection from '../components/spaces/DashboardSection';
 
@@ -24,6 +26,7 @@ export default function TeamSpace() {
   const [data, setData] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
   const [groupGoals, setGroupGoals] = useState<Record<string, any[]>>({});
+  const [orgTree, setOrgTree] = useState<OrgNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
   const [showOlderReports, setShowOlderReports] = useState(false);
@@ -35,11 +38,6 @@ export default function TeamSpace() {
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-
-  // Manual trigger
-  const [triggeringReport, setTriggeringReport] = useState(false);
-  const [triggeringProgress, setTriggeringProgress] = useState(false);
-  const [triggerMsg, setTriggerMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [buGoals, setBuGoals] = useState<Array<{ id: string; title: string }>>([]);
 
   const GOAL_LIMIT = 5;
@@ -73,6 +71,12 @@ export default function TeamSpace() {
           } catch { gGoalMap[group.id] = []; }
         }));
         setGroupGoals(gGoalMap);
+
+        // 조직도
+        try {
+          const treeRes = await orgApi.getTree(teamId);
+          setOrgTree(treeRes.data.tree);
+        } catch {}
       }
     } catch {} finally {
       setLoading(false);
@@ -131,32 +135,6 @@ export default function TeamSpace() {
     } catch { alert('공지 삭제에 실패했습니다.'); }
   };
 
-  const handleTriggerReport = async () => {
-    if (!data?.team?.id) return;
-    if (!confirm('보고서를 수동 생성하시겠습니까?')) return;
-    setTriggeringReport(true);
-    setTriggerMsg(null);
-    try {
-      const res = await adminApi.triggerReport(data.team.id);
-      setTriggerMsg({ type: 'success', text: res.data.message });
-    } catch (err: any) {
-      setTriggerMsg({ type: 'error', text: err.response?.data?.error || '보고서 생성 트리거에 실패했습니다.' });
-    } finally { setTriggeringReport(false); }
-  };
-
-  const handleTriggerProgress = async () => {
-    if (!data?.team?.id) return;
-    if (!confirm('진행률을 수동 업데이트하시겠습니까?')) return;
-    setTriggeringProgress(true);
-    setTriggerMsg(null);
-    try {
-      const res = await adminApi.triggerProgress(data.team.id);
-      setTriggerMsg({ type: 'success', text: res.data.message });
-    } catch (err: any) {
-      setTriggerMsg({ type: 'error', text: err.response?.data?.error || '진행률 업데이트 트리거에 실패했습니다.' });
-    } finally { setTriggeringProgress(false); }
-  };
-
   if (loading) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" /></div>;
   if (!data) return <div className="text-center py-12 text-gray-400">팀을 찾을 수 없습니다</div>;
 
@@ -181,9 +159,16 @@ export default function TeamSpace() {
   const latestReport = reports[0];
   const olderReports = reports.slice(1);
 
-  // 상단 영역: 공지 + 관리패널 + 목표입력 + 실패보고서
+  // 상단 영역: 조직도 + 공지 + 실패보고서 + 목표입력
   const topContent = (
     <>
+      {/* 조직도 */}
+      {orgTree && (
+        <DashboardSection title="조직도" colorBar="blue">
+          <OrgChart root={orgTree} currentId={data.team?.id} />
+        </DashboardSection>
+      )}
+
       {/* 공지 */}
       {data.announcement && !showAnnouncementForm && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -226,27 +211,6 @@ export default function TeamSpace() {
       {isTeamLevel && !data.announcement && !showAnnouncementForm && (
         <button onClick={() => { setAnnTitle(''); setAnnContent(''); setShowAnnouncementForm(true); }}
           className="text-sm text-primary-600 hover:underline">+ 팀 공지 작성</button>
-      )}
-
-      {/* 관리 패널 */}
-      {isTeamLevel && (
-        <DashboardSection title="관리 패널" colorBar="orange">
-          <div className="flex flex-wrap gap-2">
-            <button onClick={handleTriggerReport} disabled={triggeringReport}
-              className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors">
-              {triggeringReport ? '생성 중...' : '보고서 수동 생성'}
-            </button>
-            <button onClick={handleTriggerProgress} disabled={triggeringProgress}
-              className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-gray-700 transition-colors">
-              {triggeringProgress ? '업데이트 중...' : '진행률 수동 업데이트'}
-            </button>
-          </div>
-          {triggerMsg && (
-            <div className={`mt-2 p-2 rounded-lg text-xs ${
-              triggerMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
-            }`}>{triggerMsg.text}</div>
-          )}
-        </DashboardSection>
       )}
 
       {/* 실패한 보고서 재개 */}

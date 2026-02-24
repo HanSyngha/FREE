@@ -10,6 +10,7 @@ import { worklogRoutes } from './routes/worklog.routes.js';
 import { goalRoutes } from './routes/goal.routes.js';
 import { todoRoutes } from './routes/todo.routes.js';
 import { orgAdminRoutes } from './routes/orgAdmin.routes.js';
+import { orgRoutes } from './routes/org.routes.js';
 import { spaceRoutes } from './routes/space.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
@@ -46,6 +47,7 @@ app.use('/items', worklogRoutes); // 하위 호환 (1개월 후 삭제)
 app.use('/goals', goalRoutes);
 app.use('/todos', todoRoutes);
 app.use('/org-admin', orgAdminRoutes);
+app.use('/org', orgRoutes);
 app.use('/spaces', spaceRoutes);
 app.use('/reports', reportRoutes);
 app.use('/admin', adminRoutes);

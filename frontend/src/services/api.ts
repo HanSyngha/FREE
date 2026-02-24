@@ -100,6 +100,19 @@ export const orgAdminApi = {
   delete: (id: string) => api.delete(`/org-admin/${id}`),
 };
 
+// ==================== Org Management ====================
+export const orgApi = {
+  getTree: (teamId?: string) => api.get('/org/tree', { params: teamId ? { teamId } : {} }),
+  createGroup: (teamId: string, name: string) => api.post('/org/groups', { teamId, name }),
+  renameGroup: (id: string, name: string) => api.put(`/org/groups/${id}`, { name }),
+  deleteGroup: (id: string) => api.delete(`/org/groups/${id}`),
+  createPart: (groupId: string, name: string) => api.post('/org/parts', { groupId, name }),
+  renamePart: (id: string, name: string) => api.put(`/org/parts/${id}`, { name }),
+  deletePart: (id: string) => api.delete(`/org/parts/${id}`),
+  reassignUser: (userId: string, groupId: string, partId: string) =>
+    api.put(`/org/users/${userId}/reassign`, { groupId, partId }),
+};
+
 // ==================== Spaces ====================
 export const spacesApi = {
   getPersonal: () => api.get('/spaces/personal'),
