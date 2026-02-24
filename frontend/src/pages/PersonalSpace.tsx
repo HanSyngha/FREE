@@ -21,6 +21,18 @@ function getKSTToday(): string {
 function toKSTDateString(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
+function getDaysRemaining(endDateStr: string): { days: number; label: string; color: string } {
+  const today = getKSTToday();
+  const todayMs = new Date(today + 'T00:00:00').getTime();
+  const endMs = new Date(endDateStr.split('T')[0] + 'T00:00:00').getTime();
+  const diff = Math.ceil((endMs - todayMs) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return { days: diff, label: `${Math.abs(diff)}일 지남`, color: 'text-red-500' };
+  if (diff === 0) return { days: 0, label: '오늘 마감', color: 'text-orange-500' };
+  if (diff === 1) return { days: 1, label: '내일 마감', color: 'text-orange-500' };
+  if (diff <= 3) return { days: diff, label: `D-${diff}`, color: 'text-orange-400' };
+  if (diff <= 7) return { days: diff, label: `D-${diff}`, color: 'text-yellow-500' };
+  return { days: diff, label: `D-${diff}`, color: 'text-gray-400' };
+}
 
 interface WorkLog {
   id: string;
@@ -325,9 +337,15 @@ export default function PersonalSpace() {
                 <div className="flex-1 min-w-0">
                   <span className="text-sm text-gray-800">{todo.title}</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    {todo.endDate && (
-                      <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
-                    )}
+                    {todo.endDate && (() => {
+                      const dday = getDaysRemaining(todo.endDate);
+                      return (
+                        <>
+                          <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
+                          <span className={`text-xs font-medium ${dday.color}`}>{dday.label}</span>
+                        </>
+                      );
+                    })()}
                     {todo.linkedItem && (
                       <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
                         {todo.linkedItem.title}
@@ -465,8 +483,8 @@ export default function PersonalSpace() {
                     </div>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR')}</span>
-                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR')}</span>
+                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                   </div>
                 </div>
                 {older.length > 0 && (
@@ -495,8 +513,8 @@ export default function PersonalSpace() {
                           </div>
                         </div>
                         <div className="flex justify-between text-xs text-gray-400">
-                          <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR')}</span>
-                          <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR')}</span>
+                          <span>생성: {new Date(report.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                          <span>자동 삭제: {new Date(report.expiresAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                         </div>
                       </div>
                     ))}

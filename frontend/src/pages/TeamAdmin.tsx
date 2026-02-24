@@ -95,7 +95,7 @@ export default function TeamAdmin() {
                     <td className="py-2 text-gray-500">{u.loginid}</td>
                     <td className="py-2 text-gray-500">{u.group?.name || '-'}</td>
                     <td className="py-2 text-gray-500">{u.part?.name || '-'}</td>
-                    <td className="py-2 text-gray-400 text-xs">{u.lastActive ? new Date(u.lastActive).toLocaleDateString('ko-KR') : '-'}</td>
+                    <td className="py-2 text-gray-400 text-xs">{u.lastActive ? new Date(u.lastActive).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -124,7 +124,7 @@ export default function TeamAdmin() {
                     <span className={`text-xs font-medium ${log.status === 'SUCCESS' ? 'text-green-600' : 'text-red-600'}`}>
                       {log.status === 'SUCCESS' ? '성공' : '실패'}
                     </span>
-                    <span className="text-xs text-gray-400">{new Date(log.createdAt).toLocaleString('ko-KR')}</span>
+                    <span className="text-xs text-gray-400">{new Date(log.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                   </div>
                 </div>
               ))}

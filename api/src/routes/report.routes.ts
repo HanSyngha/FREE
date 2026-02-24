@@ -7,7 +7,7 @@ import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware
 import { generalLimit } from '../middleware/rateLimit.js';
 import { exportToDocx, exportToXlsx } from '../services/export.service.js';
 import { Queue } from 'bullmq';
-import { getKSTMidnight, toKSTDateString } from '../utils/date.js';
+import { getKSTMidnight, toKSTDateString, getKSTTodayForDB } from '../utils/date.js';
 
 export const reportRoutes = Router();
 
@@ -31,8 +31,8 @@ reportRoutes.post('/personal', authenticateToken, loadUser, generalLimit, async 
     const space = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
     if (!space) { res.status(404).json({ error: 'Personal space not found' }); return; }
 
-    // 최근 7일 items 조회 (KST 기준)
-    const periodEnd = getKSTMidnight();
+    // 최근 7일 items 조회 (KST 기준, UTC midnight으로 저장)
+    const periodEnd = getKSTTodayForDB();
     const periodStart = new Date(periodEnd);
     periodStart.setDate(periodStart.getDate() - 6);
 

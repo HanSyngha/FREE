@@ -170,7 +170,7 @@ export default function TeamSpace() {
               <h3 className="text-sm font-bold text-blue-800 mb-1">{data.announcement.title}</h3>
               <p className="text-sm text-blue-700">{data.announcement.content}</p>
               <p className="text-xs text-blue-500 mt-2">
-                {data.announcement.author?.username} | {new Date(data.announcement.updatedAt).toLocaleDateString('ko-KR')}
+                {data.announcement.author?.username} | {new Date(data.announcement.updatedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
               </p>
             </div>
             {isTeamLevel && (

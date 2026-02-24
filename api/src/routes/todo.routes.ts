@@ -6,6 +6,7 @@ import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
 import { llmLimit } from '../middleware/rateLimit.js';
 import { linkTodoToItem } from '../services/llm.service.js';
+import { parseDateForDB } from '../utils/date.js';
 
 export const todoRoutes = Router();
 
@@ -65,8 +66,8 @@ todoRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
         spaceId: personalSpace.id,
         title: String(title).slice(0, 500),
         content: content ? String(content).slice(0, 10000) : '',
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
+        startDate: startDate ? parseDateForDB(startDate) : null,
+        endDate: endDate ? parseDateForDB(endDate) : null,
         linkedItemId,
       },
       include: { linkedItem: { select: { id: true, title: true } } },
@@ -98,8 +99,8 @@ todoRoutes.patch('/:id', authenticateToken, loadUser, async (req: AuthenticatedR
 
     if (title !== undefined) updateData.title = String(title).slice(0, 500);
     if (content !== undefined) updateData.content = String(content).slice(0, 10000);
-    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
-    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
+    if (startDate !== undefined) updateData.startDate = startDate ? parseDateForDB(startDate) : null;
+    if (endDate !== undefined) updateData.endDate = endDate ? parseDateForDB(endDate) : null;
     if (linkedItemId !== undefined) updateData.linkedItemId = linkedItemId || null;
     if (completed !== undefined) {
       updateData.completed = !!completed;
@@ -203,7 +204,7 @@ todoRoutes.post('/external', llmLimit, async (req, res) => {
         spaceId: personalSpace.id,
         title: String(title).slice(0, 500),
         content: content ? String(content).slice(0, 10000) : '',
-        endDate: endDate ? new Date(endDate) : null,
+        endDate: endDate ? parseDateForDB(endDate) : null,
         linkedItemId,
       },
     });
@@ -232,7 +233,7 @@ todoRoutes.patch('/external/:id', async (req, res) => {
     const updateData: any = {};
     if (title !== undefined) updateData.title = String(title).slice(0, 500);
     if (content !== undefined) updateData.content = String(content).slice(0, 10000);
-    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
+    if (endDate !== undefined) updateData.endDate = endDate ? parseDateForDB(endDate) : null;
     if (completed !== undefined) {
       updateData.completed = !!completed;
       updateData.completedAt = completed ? new Date() : null;

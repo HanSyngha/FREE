@@ -357,7 +357,7 @@ export default function Profile() {
             {activityLogs.map(log => (
               <div key={log.id} className="flex items-start gap-3 px-2 py-2 hover:bg-gray-50 rounded">
                 <span className="text-xs text-gray-400 whitespace-nowrap mt-0.5">
-                  {new Date(log.createdAt).toLocaleString('ko-KR')}
+                  {new Date(log.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
                 </span>
                 <div>
                   <span className="text-sm font-medium text-gray-700">{actionLabels[log.action] || log.action}</span>
