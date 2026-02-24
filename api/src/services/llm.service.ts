@@ -3,7 +3,6 @@
  * OpenAI API 호환 endpoint 사용
  */
 import { prisma } from '../index.js';
-import { decrypt } from '../utils/encryption.js';
 import { toKSTDateString, parseKSTDate } from '../utils/date.js';
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
@@ -20,18 +19,12 @@ interface LLMResponse {
 }
 
 /**
- * 활성 LLM Config 조회
+ * Dashboard /v1/models API에서 사용 가능한 모델 조회
  */
-export async function getActiveLLMConfig() {
-  return prisma.lLMConfig.findFirst({ where: { isActive: true } });
-}
-
-/**
- * Dashboard /v1/models API에서 첫 번째 사용 가능한 모델 조회 (ONCE 패턴)
- */
-async function fetchFirstAvailableModel(
+export async function fetchAvailableModels(
   userInfo: { loginid: string; username: string; deptname: string }
-): Promise<string | null> {
+): Promise<Array<{ id: string; displayName: string; maxTokens: number }>> {
+  if (!LLM_PROXY_URL) return [];
   try {
     const baseUrl = LLM_PROXY_URL
       .replace(/\/chat\/completions$/, '')
@@ -50,20 +43,25 @@ async function fetchFirstAvailableModel(
 
     if (response.ok) {
       const data = await response.json() as any;
-      const models = data.data || [];
+      const models = (data.data || []).map((m: any) => ({
+        id: m.id,
+        displayName: m._nexus?.displayName || m.id,
+        maxTokens: m._nexus?.maxTokens || 128000,
+      }));
       if (models.length > 0) {
-        console.log(`[LLM] Fetched ${models.length} available models, using: ${models[0].id}`);
-        return models[0].id;
+        console.log(`[LLM] Fetched ${models.length} available models from Dashboard`);
       }
+      return models;
     }
   } catch (e) {
-    console.error('[LLM] Failed to fetch models from proxy:', e);
+    console.error('[LLM] Failed to fetch models from Dashboard:', e);
   }
-  return null;
+  return [];
 }
 
 /**
  * LLM Chat Completions 호출
+ * 항상 Dashboard LLM Proxy (LLM_PROXY_URL) 사용
  * operation이 지정되면 LLMOperationConfig 테이블에서 해당 모델 조회
  */
 export async function callLLM(
@@ -75,6 +73,10 @@ export async function callLLM(
     throw new Error('userInfo is required for LLM calls');
   }
 
+  if (!LLM_PROXY_URL) {
+    throw new Error('LLM_PROXY_URL is not configured');
+  }
+
   // operation별 모델 설정 조회
   let operationModelId: string | null = null;
   if (operation) {
@@ -84,34 +86,13 @@ export async function callLLM(
     } catch { /* table might not exist yet */ }
   }
 
-  const dynamicModel = await fetchFirstAvailableModel(userInfo);
-  const config = await getActiveLLMConfig();
-
-  let chatUrl: string;
-  let apiKey: string;
+  // 모델 우선순위: operation 설정 > Dashboard 첫 번째 모델
   let modelId: string;
-
-  // 모델 우선순위: operation 설정 > 동적 모델 > DB config > default
   if (operationModelId) {
     modelId = operationModelId;
-  } else if (dynamicModel) {
-    modelId = dynamicModel;
-  } else if (config?.modelId) {
-    modelId = config.modelId;
   } else {
-    modelId = 'default';
-  }
-
-  if (config?.endpoint) {
-    chatUrl = config.endpoint.endsWith('/chat/completions')
-      ? config.endpoint
-      : `${config.endpoint}/chat/completions`;
-    apiKey = config.apiKey ? decrypt(config.apiKey) : '';
-  } else if (LLM_PROXY_URL) {
-    chatUrl = LLM_PROXY_URL;
-    apiKey = '';
-  } else {
-    throw new Error('No LLM configuration available');
+    const models = await fetchAvailableModels(userInfo);
+    modelId = models[0]?.id || 'default';
   }
 
   const headers: Record<string, string> = {
@@ -122,16 +103,12 @@ export async function callLLM(
     'X-User-Dept': encodeURIComponent(userInfo.deptname),
   };
 
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
-
   console.log('[LLM] Request:', {
-    url: chatUrl, model: modelId, operation: operation || 'default',
+    url: LLM_PROXY_URL, model: modelId, operation: operation || 'default',
     serviceId: LLM_SERVICE_ID, userId: userInfo.loginid,
   });
 
-  const response = await fetch(chatUrl, {
+  const response = await fetch(LLM_PROXY_URL, {
     method: 'POST',
     headers,
     body: JSON.stringify({ model: modelId, messages, temperature: 0.3 }),
@@ -139,7 +116,7 @@ export async function callLLM(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[LLM] Error:', { status: response.status, error: errorText, url: chatUrl, model: modelId });
+    console.error('[LLM] Error:', { status: response.status, error: errorText, model: modelId });
     throw new Error(`LLM API error: ${response.status} - ${errorText}`);
   }
 
@@ -393,45 +370,6 @@ export async function normalizeNameWithLLM(
   return result.trim();
 }
 
-/**
- * Model list 동기화
- */
-export async function syncModelsFromEndpoint(
-  endpoint: string,
-  apiKey: string,
-  userInfo: { loginid: string; username: string; deptname: string }
-): Promise<Array<{ id: string; displayName: string; maxTokens: number }>> {
-  const baseUrl = endpoint
-    .replace(/\/chat\/completions$/, '')
-    .replace(/\/proxy$/, '')
-    .replace(/\/v1$/, '');
-  const modelsUrl = `${baseUrl}/v1/models`;
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Service-Id': LLM_SERVICE_ID,
-    'X-User-Id': userInfo.loginid,
-    'X-User-Name': encodeURIComponent(userInfo.username),
-    'X-User-Dept': encodeURIComponent(userInfo.deptname),
-  };
-
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetch(modelsUrl, { headers });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch models: ${response.status}`);
-  }
-
-  const data = await response.json() as any;
-  return (data.data || []).map((m: any) => ({
-    id: m.id,
-    displayName: m._nexus?.displayName || m.id,
-    maxTokens: m._nexus?.maxTokens || 128000,
-  }));
-}
 
 /**
  * LLM으로 조직장 Item 입력 → 목표 분리+매핑
