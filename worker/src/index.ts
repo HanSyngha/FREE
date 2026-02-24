@@ -29,51 +29,52 @@ const connection = { host: redisConfig.host, port: redisConfig.port };
 
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'free';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
 
-// ========== LLM Helper (standalone for worker) ==========
-async function callLLMWorker(messages: Array<{ role: string; content: string }>): Promise<string> {
-  // 활성 LLM config 조회
-  const config = await prisma.lLMConfig.findFirst({ where: { isActive: true } });
+// ========== LLM Helper (Dashboard Proxy 전용) ==========
+async function callLLMWorker(messages: Array<{ role: string; content: string }>, operation?: string): Promise<string> {
+  if (!LLM_PROXY_URL) throw new Error('LLM_PROXY_URL is not configured');
 
-  let endpoint: string;
-  let apiKey = '';
+  // operation별 모델 설정 조회
   let modelId = 'default';
-
-  if (config) {
-    endpoint = config.endpoint;
-    // Decrypt API key
-    if (config.apiKey && ENCRYPTION_KEY) {
-      try {
-        const crypto = await import('crypto');
-        const [ivHex, encrypted] = config.apiKey.split(':');
-        const iv = Buffer.from(ivHex!, 'hex');
-        const key = Buffer.from(ENCRYPTION_KEY, 'hex');
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        apiKey = decipher.update(encrypted!, 'hex', 'utf8') + decipher.final('utf8');
-      } catch { apiKey = ''; }
-    }
-    modelId = config.modelId;
-  } else if (LLM_PROXY_URL) {
-    endpoint = LLM_PROXY_URL.replace(/\/chat\/completions$/, '');
-  } else {
-    throw new Error('No LLM configuration');
+  if (operation) {
+    try {
+      const opConfig = await prisma.lLMOperationConfig.findUnique({ where: { operation } });
+      if (opConfig) modelId = opConfig.modelId;
+    } catch { /* table might not exist yet */ }
   }
 
-  const chatUrl = endpoint!.endsWith('/chat/completions') ? endpoint! : `${endpoint!}/chat/completions`;
+  // 모델이 기본값이면 Dashboard에서 첫 번째 모델 조회
+  if (modelId === 'default') {
+    try {
+      const baseUrl = LLM_PROXY_URL.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '');
+      const resp = await fetch(`${baseUrl}/v1/models`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Id': LLM_SERVICE_ID,
+          'X-User-Id': 'system-worker',
+          'X-User-Name': 'FREE%20Worker',
+          'X-User-Dept': 'system',
+        },
+      });
+      if (resp.ok) {
+        const data = await resp.json() as any;
+        const firstModel = (data.data || [])[0];
+        if (firstModel) modelId = firstModel.id;
+      }
+    } catch { /* use default */ }
+  }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Service-Id': LLM_SERVICE_ID,
-    'X-User-Id': 'system-worker',
-    'X-User-Name': 'FREE%20Worker',
-    'X-User-Dept': 'system',
-  };
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+  const chatUrl = LLM_PROXY_URL.endsWith('/chat/completions') ? LLM_PROXY_URL : `${LLM_PROXY_URL}/chat/completions`;
 
   const response = await fetch(chatUrl, {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Service-Id': LLM_SERVICE_ID,
+      'X-User-Id': 'system-worker',
+      'X-User-Name': 'FREE%20Worker',
+      'X-User-Dept': 'system',
+    },
     body: JSON.stringify({ model: modelId, messages, temperature: 0.3 }),
   });
 
@@ -86,10 +87,10 @@ async function callLLMWorker(messages: Array<{ role: string; content: string }>)
 }
 
 // ========== Retry Logic ==========
-async function callWithRetry(messages: Array<{ role: string; content: string }>, maxRetries = 5): Promise<string> {
+async function callWithRetry(messages: Array<{ role: string; content: string }>, operation?: string, maxRetries = 5): Promise<string> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await callLLMWorker(messages);
+      return await callLLMWorker(messages, operation);
     } catch (error) {
       console.error(`LLM attempt ${attempt}/${maxRetries} failed:`, error);
       if (attempt < maxRetries) {
@@ -104,7 +105,7 @@ async function callWithRetry(messages: Array<{ role: string; content: string }>,
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await callLLMWorker(messages);
+      return await callLLMWorker(messages, operation);
     } catch (error) {
       console.error(`LLM retry2 attempt ${attempt}/${maxRetries} failed:`, error);
       if (attempt < maxRetries) {
@@ -288,11 +289,11 @@ async function generatePartReportWorker(
       callWithRetry([
         { role: 'system', content: `${partContext}다음은 ${part.name} 파트의 개인별 업무 기록입니다.\n각 개인이 수행한 업무를 개인별로 정리하여 주간 보고서 형태로 작성해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: itemsData },
-      ]),
+      ], 'REPORT'),
       callWithRetry([
         { role: 'system', content: `${partContext}다음은 ${part.name} 파트의 업무 기록입니다.\n동일하거나 유사한 업무 항목을 기준으로 정리하여 주간 보고서 형태로 작성해 주세요.\n어떤 인원이 해당 업무에 참여했는지도 명시해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: itemsData },
-      ]),
+      ], 'REPORT'),
     ]);
   }
 
@@ -361,11 +362,11 @@ async function generateGroupReportWorker(
       callWithRetry([
         { role: 'system', content: `${groupContext}다음은 ${group.name} 그룹 내 각 파트의 주간 업무 정리입니다.\n각 파트의 업무를 파트 단위로 정리해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: partReportsData },
-      ]),
+      ], 'REPORT'),
       callWithRetry([
         { role: 'system', content: `${groupContext}다음은 ${group.name} 그룹 내 각 파트의 주간 업무 정리입니다.\n파트 간 중복/유사 업무를 항목별로 통합 정리해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: partReportsData },
-      ]),
+      ], 'REPORT'),
     ]);
   }
 
@@ -429,11 +430,11 @@ async function generateTeamReportWorker(
       callWithRetry([
         { role: 'system', content: `${teamContext}다음은 ${team.name} 팀 내 각 그룹의 주간 업무 정리입니다.\n각 그룹의 업무를 그룹 단위로 정리해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: groupReportsData },
-      ]),
+      ], 'REPORT'),
       callWithRetry([
         { role: 'system', content: `${teamContext}다음은 ${team.name} 팀 내 각 그룹의 주간 업무 정리입니다.\n그룹 간 중복/유사 업무를 항목별로 통합 정리해 주세요.\nMarkdown 형식(제목, 볼드, 리스트, 테이블 등)을 활용해 가독성 좋게 작성해 주세요.` },
         { role: 'user', content: groupReportsData },
-      ]),
+      ], 'REPORT'),
     ]);
   }
 
@@ -648,7 +649,7 @@ async function callProgressLLM(
   const result = await callWithRetry([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: childData },
-  ]);
+  ], 'UPDATE_PROGRESS');
 
   const jsonMatch = result.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return { progress: 0, summary: '' };

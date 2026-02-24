@@ -4,8 +4,7 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, requireTeamAdminOrHigher, loadUser, getVisibleScope } from '../middleware/auth.js';
-import { syncModelsFromEndpoint } from '../services/llm.service.js';
-import { encrypt } from '../utils/encryption.js';
+import { fetchAvailableModels } from '../services/llm.service.js';
 import { getKSTMidnight, parseKSTDate } from '../utils/date.js';
 import { Queue } from 'bullmq';
 
@@ -24,137 +23,6 @@ const progressQueue = new Queue('progress-update', {
 });
 
 export const adminRoutes = Router();
-
-// POST /admin/llm/endpoint - LLM endpoint 설정
-adminRoutes.post('/llm/endpoint', authenticateToken, requireSuperAdmin, loadUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { endpoint, apiKey } = req.body;
-    if (!endpoint) { res.status(400).json({ error: 'endpoint is required' }); return; }
-
-    await prisma.lLMConfig.updateMany({ where: { isActive: true }, data: { isActive: false } });
-
-    const config = await prisma.lLMConfig.create({
-      data: {
-        endpoint,
-        apiKey: apiKey ? encrypt(apiKey) : '',
-        modelId: '',
-        modelName: '',
-        isActive: false,
-      },
-    });
-
-    res.json({ success: true, config: { id: config.id, endpoint: config.endpoint } });
-  } catch (error) {
-    console.error('Set endpoint error:', error);
-    res.status(500).json({ error: 'Failed to set endpoint' });
-  }
-});
-
-// POST /admin/llm/sync - endpoint에서 model list 동기화
-adminRoutes.post('/llm/sync', authenticateToken, requireSuperAdmin, loadUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { endpoint, apiKey } = req.body;
-
-    const targetEndpoint = endpoint || (await prisma.lLMConfig.findFirst({
-      orderBy: { createdAt: 'desc' },
-    }))?.endpoint;
-
-    if (!targetEndpoint) { res.status(400).json({ error: 'No endpoint configured' }); return; }
-
-    const models = await syncModelsFromEndpoint(
-      targetEndpoint, apiKey || '',
-      { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
-    );
-
-    const availableModelIds = models.map(m => m.id);
-    const activeConfig = await prisma.lLMConfig.findFirst({ where: { isActive: true } });
-
-    if (activeConfig && !availableModelIds.includes(activeConfig.modelId)) {
-      console.log(`[Sync] Active model '${activeConfig.modelId}' no longer available, deactivating...`);
-      await prisma.lLMConfig.update({ where: { id: activeConfig.id }, data: { isActive: false } });
-
-      if (models.length > 0) {
-        const first = models[0];
-        await prisma.lLMConfig.create({
-          data: {
-            endpoint: targetEndpoint,
-            apiKey: apiKey ? encrypt(apiKey) : '',
-            modelId: first.id, modelName: first.displayName,
-            isActive: true, lastSyncAt: new Date(),
-          },
-        });
-      }
-    }
-
-    res.json({ models, syncedAt: new Date().toISOString() });
-  } catch (error) {
-    console.error('Sync models error:', error);
-    res.status(500).json({ error: 'Failed to sync models' });
-  }
-});
-
-// GET /admin/llm/models - Sync된 model 목록
-adminRoutes.get('/llm/models', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
-  try {
-    const configs = await prisma.lLMConfig.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, endpoint: true, modelId: true, modelName: true, isActive: true, lastSyncAt: true, createdAt: true },
-    });
-
-    const latestConfig = configs[0];
-    let availableModels: any[] = [];
-
-    if (latestConfig) {
-      try {
-        availableModels = await syncModelsFromEndpoint(
-          latestConfig.endpoint, '',
-          { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
-        );
-      } catch { /* ignore sync errors */ }
-    }
-
-    res.json({ configs, availableModels });
-  } catch (error) {
-    console.error('Get models error:', error);
-    res.status(500).json({ error: 'Failed to get models' });
-  }
-});
-
-// PUT /admin/llm/activate/:modelId - model 활성화
-adminRoutes.put('/llm/activate/:modelId', authenticateToken, requireSuperAdmin, loadUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const modelId = req.params.modelId as string;
-    const { modelName, endpoint, apiKey } = req.body;
-
-    let targetEndpoint = endpoint;
-    let targetApiKey = apiKey;
-    if (!targetEndpoint) {
-      const existingConfig = await prisma.lLMConfig.findFirst({ where: { isActive: true } })
-        || await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
-      targetEndpoint = existingConfig?.endpoint || process.env.LLM_PROXY_URL || '';
-      if (!targetApiKey && existingConfig?.apiKey) targetApiKey = '__KEEP_EXISTING__';
-    }
-
-    if (!targetEndpoint) { res.status(400).json({ error: 'endpoint is required' }); return; }
-
-    await prisma.lLMConfig.updateMany({ where: { isActive: true }, data: { isActive: false } });
-
-    const existingForKey = await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
-    const config = await prisma.lLMConfig.create({
-      data: {
-        endpoint: targetEndpoint,
-        apiKey: targetApiKey === '__KEEP_EXISTING__' ? (existingForKey?.apiKey || '') : (targetApiKey ? encrypt(targetApiKey) : ''),
-        modelId, modelName: modelName || modelId,
-        isActive: true, lastSyncAt: new Date(),
-      },
-    });
-
-    res.json({ success: true, config: { id: config.id, modelId: config.modelId, modelName: config.modelName, isActive: true } });
-  } catch (error) {
-    console.error('Activate model error:', error);
-    res.status(500).json({ error: 'Failed to activate model' });
-  }
-});
 
 // GET /admin/teams - 전체 팀 + 사용자 목록
 adminRoutes.get('/teams', authenticateToken, requireSuperAdmin, async (_req: AuthenticatedRequest, res) => {
@@ -317,23 +185,18 @@ adminRoutes.post('/trigger-progress', authenticateToken, requireTeamAdminOrHighe
 // ========== LLM Operation Config API ==========
 
 // GET /admin/llm-operations - 모든 작업별 모델 설정
-adminRoutes.get('/llm-operations', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+adminRoutes.get('/llm-operations', authenticateToken, requireSuperAdmin, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
     const operations = await prisma.lLMOperationConfig.findMany({
       orderBy: { operation: 'asc' },
     });
 
-    // 사용 가능 모델 목록도 반환
-    let availableModels: any[] = [];
-    const latestConfig = await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
-    if (latestConfig) {
-      try {
-        availableModels = await syncModelsFromEndpoint(
-          latestConfig.endpoint, '',
-          { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
-        );
-      } catch { /* ignore */ }
-    }
+    // Dashboard에서 사용 가능한 모델 목록 직접 조회
+    const availableModels = await fetchAvailableModels({
+      loginid: req.user!.loginid,
+      username: req.user!.username,
+      deptname: req.user!.deptname,
+    });
 
     const operationTypes = [
       { key: 'PARSE_GOALS', label: '조직 목표 분리' },

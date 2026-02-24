@@ -1,5 +1,5 @@
 /**
- * Super Admin Page - LLM 관리, 팀 관리, Team Admin 지정, LLM 작업별 모델, 보고서/진행률 트리거
+ * Super Admin Page - 팀 관리, Team Admin 지정, LLM 작업별 모델, 보고서/진행률 트리거
  */
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
@@ -19,15 +19,7 @@ export default function SuperAdmin() {
   const { isSuperAdmin } = useAuthStore();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'llm' | 'teams' | 'reports' | 'orgadmin' | 'llmops'>('llm');
-
-  // LLM State
-  const [endpoint, setEndpoint] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [models, setModels] = useState<any[]>([]);
-  const [configs, setConfigs] = useState<any[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<'teams' | 'reports' | 'orgadmin' | 'llmops'>('llmops');
 
   // Report Trigger State
   const [reportTeamId, setReportTeamId] = useState('');
@@ -55,16 +47,9 @@ export default function SuperAdmin() {
 
   useEffect(() => {
     if (!isSuperAdmin) { navigate('/'); return; }
-    fetchModels();
     fetchTeams();
+    fetchLLMOps();
   }, []);
-
-  const fetchModels = () => {
-    adminApi.getModels().then(res => {
-      setModels(res.data.availableModels || []);
-      setConfigs(res.data.configs || []);
-    }).catch(() => {});
-  };
 
   const fetchTeams = () => {
     adminApi.getTeams().then(res => setTeams(res.data.teams)).catch(() => {});
@@ -76,37 +61,6 @@ export default function SuperAdmin() {
       setAvailableModels(res.data.availableModels || []);
       setOpTypes((res.data.operationTypes || []).map((t: any) => typeof t === 'string' ? t : t.key));
     }).catch(() => {});
-  };
-
-  const handleSetEndpoint = async () => {
-    setSaving(true);
-    try {
-      await adminApi.setEndpoint(endpoint, apiKey);
-      alert('Endpoint가 설정되었습니다.');
-    } catch { alert('설정에 실패했습니다.'); }
-    finally { setSaving(false); }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await adminApi.syncModels(endpoint || undefined, apiKey || undefined);
-      setModels(res.data.models || []);
-      alert(`${res.data.models?.length || 0}개 모델이 동기화되었습니다.`);
-    } catch { alert('동기화에 실패했습니다.'); }
-    finally { setSyncing(false); }
-  };
-
-  const handleActivate = async (model: any) => {
-    try {
-      await adminApi.activateModel(model.id, {
-        modelName: model.displayName,
-        endpoint,
-        apiKey,
-      });
-      fetchModels();
-      alert(`${model.displayName} 모델이 활성화되었습니다.`);
-    } catch { alert('활성화에 실패했습니다.'); }
   };
 
   const handleAddAdmin = async (userId?: string) => {
@@ -207,80 +161,19 @@ export default function SuperAdmin() {
       {/* Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap" role="tablist" aria-label="관리 메뉴">
         {([
-          ['llm', 'LLM 설정'],
           ['llmops', 'LLM 작업별 모델'],
           ['teams', '팀 관리'],
           ['reports', '보고서/진행률'],
           ['orgadmin', '조직 권한'],
         ] as const).map(([key, label]) => (
           <button key={key}
-            onClick={() => { setTab(key); if (key === 'orgadmin' && orgAdmins.length === 0) fetchOrgAdmins(); if (key === 'llmops' && llmOps.length === 0) fetchLLMOps(); }}
+            onClick={() => { setTab(key); if (key === 'orgadmin' && orgAdmins.length === 0) fetchOrgAdmins(); }}
             role="tab" aria-selected={tab === key}
             className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {label}
           </button>
         ))}
       </div>
-
-      {/* LLM Tab */}
-      {tab === 'llm' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-sm font-bold text-gray-700 mb-4">LLM Endpoint 설정</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500">Endpoint URL</label>
-                <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)}
-                  placeholder="http://..." className="w-full px-3 py-2 border rounded-lg text-sm mt-1" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">API Key (선택)</label>
-                <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password"
-                  placeholder="API Key" className="w-full px-3 py-2 border rounded-lg text-sm mt-1" />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleSetEndpoint} disabled={saving || !endpoint}
-                  className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50">
-                  {saving ? '저장 중...' : 'Endpoint 저장'}
-                </button>
-                <button onClick={handleSync} disabled={syncing}
-                  className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg disabled:opacity-50">
-                  {syncing ? '동기화 중...' : 'Model Sync'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-sm font-bold text-gray-700 mb-4">사용 가능한 모델</h2>
-            {models.length === 0 ? (
-              <p className="text-sm text-gray-400">Sync를 실행하여 모델을 불러오세요</p>
-            ) : (
-              <div className="space-y-2">
-                {models.map(model => {
-                  const isActive = configs.some(c => c.modelId === model.id && c.isActive);
-                  return (
-                    <div key={model.id} className={`flex items-center justify-between p-3 rounded-lg border
-                      ${isActive ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">{model.displayName}</span>
-                        <span className="text-xs text-gray-400 ml-2">{model.id}</span>
-                        {isActive && <span className="text-xs text-green-600 ml-2 font-medium">활성</span>}
-                      </div>
-                      {!isActive && (
-                        <button onClick={() => handleActivate(model)}
-                          className="px-3 py-1 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700">
-                          활성화
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* LLM Operations Tab */}
       {tab === 'llmops' && (

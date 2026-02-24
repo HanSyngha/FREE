@@ -122,13 +122,6 @@ export const reportsApi = {
 
 // ==================== Admin ====================
 export const adminApi = {
-  setEndpoint: (endpoint: string, apiKey?: string) =>
-    api.post('/admin/llm/endpoint', { endpoint, apiKey }),
-  syncModels: (endpoint?: string, apiKey?: string) =>
-    api.post('/admin/llm/sync', { endpoint, apiKey }),
-  getModels: () => api.get('/admin/llm/models'),
-  activateModel: (modelId: string, data: { modelName?: string; endpoint?: string; apiKey?: string }) =>
-    api.put(`/admin/llm/activate/${modelId}`, data),
   getTeams: () => api.get('/admin/teams'),
   addTeamAdmin: (userId: string, teamId: string) =>
     api.post('/admin/team-admin', { userId, teamId }),
