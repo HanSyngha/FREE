@@ -14,12 +14,22 @@ export interface User {
   partName?: string | null;
 }
 
+export interface VisibleScope {
+  level: 'SUPER' | 'TEAM' | 'GROUP' | 'PART' | 'PERSONAL';
+  editLevel: 'SUPER' | 'TEAM' | 'GROUP' | 'PART' | 'PERSONAL';
+  teamId?: string;
+  groupId?: string;
+  partId?: string;
+}
+
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isSuperAdmin: boolean;
   isTeamAdmin: boolean;
   needsOnboarding: boolean;
+  visibleScope: VisibleScope | null;
+  orgAdminLevels: Array<{ level: string; targetId: string }>;
   spaces: {
     personalSpaceId: string | null;
     teamSpaceId: string | null;
@@ -33,6 +43,8 @@ interface AuthState {
     isTeamAdmin: boolean;
     needsOnboarding: boolean;
     spaces: { personalSpaceId: string | null; teamSpaceId: string | null; teamId: string | null };
+    visibleScope?: VisibleScope;
+    orgAdminLevels?: Array<{ level: string; targetId: string }>;
   }) => void;
   logout: () => void;
 }
@@ -43,6 +55,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isSuperAdmin: false,
   isTeamAdmin: false,
   needsOnboarding: false,
+  visibleScope: null,
+  orgAdminLevels: [],
   spaces: { personalSpaceId: null, teamSpaceId: null, teamId: null },
 
   setUser: (user) => set({ user }),
@@ -54,6 +68,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     isTeamAdmin: data.isTeamAdmin,
     needsOnboarding: data.needsOnboarding,
     spaces: data.spaces,
+    visibleScope: data.visibleScope || null,
+    orgAdminLevels: data.orgAdminLevels || [],
     isLoading: false,
   }),
 
@@ -64,6 +80,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       isSuperAdmin: false,
       isTeamAdmin: false,
       needsOnboarding: false,
+      visibleScope: null,
+      orgAdminLevels: [],
       spaces: { personalSpaceId: null, teamSpaceId: null, teamId: null },
     });
   },

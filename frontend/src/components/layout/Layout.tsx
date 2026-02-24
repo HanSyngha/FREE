@@ -104,9 +104,6 @@ export default function Layout() {
                 <NavLink to="/space/personal" className={navLinkClass}>
                   나의 업무 기록
                 </NavLink>
-                <NavLink to="/goals/dashboard" className={navLinkClass}>
-                  목표 대시보드
-                </NavLink>
               </div>
 
               {/* 사업부 → 팀 → 그룹 → 파트 트리 */}

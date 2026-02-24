@@ -1,10 +1,10 @@
 /**
- * Team Space Page - 팀 목표 + 하위 그룹 진행률
+ * Team Space Page - 팀 목표 + 하위 그룹 진행률 (단일 페이지)
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, reportsApi, announcementsApi, goalsApi } from '../services/api';
+import { spacesApi, reportsApi, announcementsApi, goalsApi, adminApi } from '../services/api';
 import GoalCard from '../components/goal/GoalCard';
 import GoalInputForm from '../components/goal/GoalInputForm';
 import ProgressBar from '../components/common/ProgressBar';
@@ -24,14 +24,18 @@ export default function TeamSpace() {
   const [groupGoals, setGroupGoals] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
-  const [activeTab, setActiveTab] = useState<'goals' | 'records'>('goals');
-
-  // Announcement management
-  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   const [showOlderReports, setShowOlderReports] = useState(false);
+
+  // Announcement
+  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
+
+  // Manual trigger
+  const [triggeringReport, setTriggeringReport] = useState(false);
+  const [triggeringProgress, setTriggeringProgress] = useState(false);
+  const [triggerMsg, setTriggerMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const isTeamLevel = isSuperAdmin || isTeamAdmin;
 
@@ -45,7 +49,6 @@ export default function TeamSpace() {
         const goalsRes = await goalsApi.getAll({ level: 'TEAM', ownerId: teamId });
         setGoals(goalsRes.data.goals || []);
 
-        // 하위 그룹별 목표
         const groups = spaceRes.data.team?.groups || [];
         const gGoalMap: Record<string, any[]> = {};
         await Promise.all(groups.map(async (group: any) => {
@@ -113,6 +116,32 @@ export default function TeamSpace() {
     } catch { alert('공지 삭제에 실패했습니다.'); }
   };
 
+  const handleTriggerReport = async () => {
+    if (!data?.team?.id) return;
+    if (!confirm('보고서를 수동 생성하시겠습니까?')) return;
+    setTriggeringReport(true);
+    setTriggerMsg(null);
+    try {
+      const res = await adminApi.triggerReport(data.team.id);
+      setTriggerMsg({ type: 'success', text: res.data.message });
+    } catch (err: any) {
+      setTriggerMsg({ type: 'error', text: err.response?.data?.error || '보고서 생성 트리거에 실패했습니다.' });
+    } finally { setTriggeringReport(false); }
+  };
+
+  const handleTriggerProgress = async () => {
+    if (!data?.team?.id) return;
+    if (!confirm('진행률을 수동 업데이트하시겠습니까?')) return;
+    setTriggeringProgress(true);
+    setTriggerMsg(null);
+    try {
+      const res = await adminApi.triggerProgress(data.team.id);
+      setTriggerMsg({ type: 'success', text: res.data.message });
+    } catch (err: any) {
+      setTriggerMsg({ type: 'error', text: err.response?.data?.error || '진행률 업데이트 트리거에 실패했습니다.' });
+    } finally { setTriggeringProgress(false); }
+  };
+
   if (loading) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" /></div>;
   if (!data) return <div className="text-center py-12 text-gray-400">팀을 찾을 수 없습니다</div>;
 
@@ -177,6 +206,28 @@ export default function TeamSpace() {
           className="mb-4 text-sm text-primary-600 hover:underline">+ 팀 공지 작성</button>
       )}
 
+      {/* 관리 패널 (TeamAdmin/SuperAdmin) */}
+      {isTeamLevel && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">관리 패널</h3>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleTriggerReport} disabled={triggeringReport}
+              className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors">
+              {triggeringReport ? '생성 중...' : '보고서 수동 생성'}
+            </button>
+            <button onClick={handleTriggerProgress} disabled={triggeringProgress}
+              className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-gray-700 transition-colors">
+              {triggeringProgress ? '업데이트 중...' : '진행률 수동 업데이트'}
+            </button>
+          </div>
+          {triggerMsg && (
+            <div className={`mt-2 p-2 rounded-lg text-xs ${
+              triggerMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>{triggerMsg.text}</div>
+          )}
+        </div>
+      )}
+
       {/* 실패한 보고서 재개 */}
       {data.failedJob && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
@@ -193,161 +244,140 @@ export default function TeamSpace() {
         </div>
       )}
 
-      {/* 탭 */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        <button onClick={() => setActiveTab('goals')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'goals' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}>
-          목표
-        </button>
-        <button onClick={() => setActiveTab('records')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'records' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}>
-          업무 기록
-        </button>
-      </div>
+      {/* 팀 목표 입력 */}
+      {isTeamLevel && data.team?.id && (
+        <GoalInputForm level="TEAM" ownerId={data.team.id} onCreated={fetchData} />
+      )}
 
-      {activeTab === 'goals' && (
-        <>
-          {/* 팀 목표 입력 */}
-          {isTeamLevel && data.team?.id && (
-            <GoalInputForm level="TEAM" ownerId={data.team.id} onCreated={fetchData} />
-          )}
+      {/* 팀 목표 */}
+      {goals.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3">팀 목표 ({goals.length})</h2>
+          <div className="space-y-3">
+            {goals.map((goal: any) => (
+              <GoalCard key={goal.id} goal={goal} canEdit={isTeamLevel} onUpdate={fetchData} />
+            ))}
+          </div>
+        </div>
+      )}
 
-          {/* 팀 목표 */}
-          {goals.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 mb-3">팀 목표</h2>
-              <div className="space-y-3">
-                {goals.map((goal: any) => (
-                  <GoalCard key={goal.id} goal={goal} onClick={() => navigate(`/goals/${goal.id}`)} />
-                ))}
+      {/* 하위 그룹별 목표 진행률 */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-gray-500 mb-3">그룹별 목표</h2>
+        {(data.team?.groups || []).map((group: any) => {
+          const gGoals = groupGoals[group.id] || [];
+          const avgProgress = gGoals.length > 0
+            ? Math.round(gGoals.reduce((s: number, g: any) => s + g.progress, 0) / gGoals.length)
+            : 0;
+          return (
+            <div key={group.id}
+              className="bg-white rounded-xl border border-gray-200 p-4 mb-3 cursor-pointer hover:shadow-sm transition-shadow"
+              onClick={() => navigate(`/space/group/${group.id}`)}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-800">{group.name}</span>
+                <span className="text-xs text-gray-400">{gGoals.length}개 목표</span>
               </div>
-            </div>
-          )}
-
-          {/* 하위 그룹별 목표 진행률 */}
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-500 mb-3">그룹별 목표</h2>
-            {(data.team?.groups || []).map((group: any) => {
-              const gGoals = groupGoals[group.id] || [];
-              const avgProgress = gGoals.length > 0
-                ? Math.round(gGoals.reduce((s: number, g: any) => s + g.progress, 0) / gGoals.length)
-                : 0;
-              return (
-                <div key={group.id}
-                  className="bg-white rounded-xl border border-gray-200 p-4 mb-3 cursor-pointer hover:shadow-sm transition-shadow"
-                  onClick={() => navigate(`/space/group/${group.id}`)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-800">{group.name}</span>
-                    <span className="text-xs text-gray-400">{gGoals.length}개 목표</span>
-                  </div>
-                  <ProgressBar progress={avgProgress} size="md" />
-                  {gGoals.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {gGoals.slice(0, 3).map((g: any) => (
-                        <GoalCard key={g.id} goal={g} compact />
-                      ))}
-                      {gGoals.length > 3 && (
-                        <p className="text-xs text-gray-400 px-1">+{gGoals.length - 3}개 더</p>
-                      )}
-                    </div>
+              <ProgressBar progress={avgProgress} size="md" />
+              {gGoals.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {gGoals.slice(0, 3).map((g: any) => (
+                    <GoalCard key={g.id} goal={g} compact />
+                  ))}
+                  {gGoals.length > 3 && (
+                    <p className="text-xs text-gray-400 px-1">+{gGoals.length - 3}개 더</p>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {activeTab === 'records' && (
-        <>
-          {/* 보고서 */}
-          {data.reports?.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 mb-3">주간 보고서</h2>
-              {(() => {
-                const latest = data.reports[0];
-                const older = data.reports.slice(1);
-                return (
-                  <>
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span onClick={() => navigate(`/report/${latest.id}`)}
-                          className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
-                          {data.team?.name} 보고서 {formatDateWithDay(latest.periodStart)} ~ {formatDateWithDay(latest.periodEnd)}
-                        </span>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleExport(latest.id, 'docx')}
-                            className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
-                          <button onClick={() => handleExport(latest.id, 'xlsx')}
-                            className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
-                        </div>
-                      </div>
-                    </div>
-                    {older.length > 0 && (
-                      <>
-                        <button onClick={() => setShowOlderReports(!showOlderReports)}
-                          className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
-                          <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                          </svg>
-                          이전 보고서 ({older.length})
-                        </button>
-                        {showOlderReports && older.map((report: any) => (
-                          <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
-                            <span onClick={() => navigate(`/report/${report.id}`)}
-                              className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
-                              {data.team?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
-                            </span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </>
-                );
-              })()}
+              )}
             </div>
-          )}
+          );
+        })}
+      </div>
 
-          {/* WorkLog 목록 */}
-          {sortedDates.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">등록된 업무 기록이 없습니다</div>
-          ) : (
-            sortedDates.map(dateKey => (
-              <div key={dateKey} className="mb-6">
-                <h2 className="text-sm font-semibold text-gray-500 mb-3">{dateKey}</h2>
-                {Object.entries(groupedByDate[dateKey]!).map(([groupName, groupItems]) => (
-                  <div key={groupName} className="mb-3">
-                    <h3 className="text-xs font-medium text-gray-600 mb-2 px-1 cursor-pointer hover:text-primary-600"
-                      onClick={() => {
-                        const group = data.team?.groups?.find((g: any) => g.name === groupName);
-                        if (group) navigate(`/space/group/${group.id}`);
-                      }}>
-                      {groupName}
-                    </h3>
-                    <div className="space-y-1">
-                      {(groupItems as any[]).map((item: any) => (
-                        <div key={item.id} className="px-3 py-2 bg-white rounded-lg border border-gray-100 cursor-pointer hover:border-primary-200 transition-colors"
-                          onClick={() => {
-                            const group = data.team?.groups?.find((g: any) => g.name === groupName);
-                            if (group) navigate(`/space/group/${group.id}`);
-                          }}>
-                          <span className="text-sm text-gray-700">{item.title}</span>
-                          <span className="text-xs text-gray-400 ml-2">{item.user?.username}</span>
-                        </div>
-                      ))}
+      {/* 보고서 */}
+      {data.reports?.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3">주간 보고서</h2>
+          {(() => {
+            const latest = data.reports[0];
+            const older = data.reports.slice(1);
+            return (
+              <>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span onClick={() => navigate(`/report/${latest.id}`)}
+                      className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
+                      {data.team?.name} 보고서 {formatDateWithDay(latest.periodStart)} ~ {formatDateWithDay(latest.periodEnd)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleExport(latest.id, 'docx')}
+                        className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                      <button onClick={() => handleExport(latest.id, 'xlsx')}
+                        className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
                     </div>
                   </div>
-                ))}
-              </div>
-            ))
-          )}
-        </>
+                </div>
+                {older.length > 0 && (
+                  <>
+                    <button onClick={() => setShowOlderReports(!showOlderReports)}
+                      className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
+                      <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      이전 보고서 ({older.length})
+                    </button>
+                    {showOlderReports && older.map((report: any) => (
+                      <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
+                        <span onClick={() => navigate(`/report/${report.id}`)}
+                          className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
+                          {data.team?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </div>
       )}
+
+      {/* 업무 기록 */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-500 mb-3">업무 기록</h2>
+        {sortedDates.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm">등록된 업무 기록이 없습니다</div>
+        ) : (
+          sortedDates.map(dateKey => (
+            <div key={dateKey} className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3">{dateKey}</h3>
+              {Object.entries(groupedByDate[dateKey]!).map(([groupName, groupItems]) => (
+                <div key={groupName} className="mb-3">
+                  <h4 className="text-xs font-medium text-gray-600 mb-2 px-1 cursor-pointer hover:text-primary-600"
+                    onClick={() => {
+                      const group = data.team?.groups?.find((g: any) => g.name === groupName);
+                      if (group) navigate(`/space/group/${group.id}`);
+                    }}>
+                    {groupName}
+                  </h4>
+                  <div className="space-y-1">
+                    {(groupItems as any[]).map((item: any) => (
+                      <div key={item.id} className="px-3 py-2 bg-white rounded-lg border border-gray-100 cursor-pointer hover:border-primary-200 transition-colors"
+                        onClick={() => {
+                          const group = data.team?.groups?.find((g: any) => g.name === groupName);
+                          if (group) navigate(`/space/group/${group.id}`);
+                        }}>
+                        <span className="text-sm text-gray-700">{item.title}</span>
+                        <span className="text-xs text-gray-400 ml-2">{item.user?.username}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

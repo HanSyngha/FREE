@@ -1,8 +1,10 @@
 /**
- * GoalCard - 목표 카드
+ * GoalCard - 확장형 목표 카드
+ * 클릭 시 인라인 확장 → 상세 정보/매핑/수정 가능
  */
+import { useState } from 'react';
+import { goalsApi, todosApi, workLogsApi } from '../../services/api';
 import ProgressBar from '../common/ProgressBar';
-import TagBadge from '../common/TagBadge';
 
 interface GoalCardProps {
   goal: {
@@ -14,14 +16,19 @@ interface GoalCardProps {
     startDate?: string | null;
     endDate?: string | null;
     summary?: string | null;
-    itemTags?: Array<{ tag: { name: string } }>;
-    tags?: string[];
     childItems?: Array<{ id: string; title: string; progress: number; status: string }>;
     parentItem?: { id: string; title: string; level?: string } | null;
+    linkedWorkLogs?: Array<{ id: string; title: string }>;
+    linkedTodos?: Array<{ id: string; title: string }>;
     _count?: { linkedWorkLogs: number; linkedTodos: number };
   };
-  onClick?: () => void;
+  canEdit?: boolean;
   compact?: boolean;
+  onUpdate?: () => void;
+  /** 상위 목표 후보 목록 (매핑 변경용) */
+  parentCandidates?: Array<{ id: string; title: string }>;
+  /** 미매핑 하위 목표 목록 (하위 추가용) */
+  unmappedChildren?: Array<{ id: string; title: string }>;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -30,16 +37,72 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   COMPLETED: { label: '완료', color: 'bg-green-100 text-green-700' },
 };
 
-export default function GoalCard({ goal, onClick, compact = false }: GoalCardProps) {
+const STATUS_OPTIONS = ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] as const;
+
+export default function GoalCard({ goal, canEdit = false, compact = false, onUpdate, parentCandidates, unmappedChildren }: GoalCardProps) {
   const status = STATUS_LABELS[goal.status] || STATUS_LABELS.PLANNED;
-  const tags = goal.tags || goal.itemTags?.map(it => it.tag.name) || [];
+  const [expanded, setExpanded] = useState(false);
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summaryValue, setSummaryValue] = useState(goal.summary || '');
+  const [progressValue, setProgressValue] = useState(goal.progress);
+  const [statusValue, setStatusValue] = useState(goal.status);
+  const [saving, setSaving] = useState(false);
+  const [showParentSelect, setShowParentSelect] = useState(false);
+  const [showChildSelect, setShowChildSelect] = useState(false);
+
+  const handleSaveInline = async (data: Record<string, any>) => {
+    setSaving(true);
+    try {
+      await goalsApi.update(goal.id, data);
+      onUpdate?.();
+    } catch {} finally { setSaving(false); }
+  };
+
+  const handleSaveSummary = () => {
+    handleSaveInline({ summary: summaryValue });
+    setEditingSummary(false);
+  };
+
+  const handleChangeParent = async (parentItemId: string | null) => {
+    try {
+      await goalsApi.updateMapping(goal.id, { parentItemId });
+      onUpdate?.();
+    } catch {}
+    setShowParentSelect(false);
+  };
+
+  const handleAddChild = async (childId: string) => {
+    try {
+      await goalsApi.updateMapping(childId, { parentItemId: goal.id });
+      onUpdate?.();
+    } catch {}
+    setShowChildSelect(false);
+  };
+
+  const handleRemoveChild = async (childId: string) => {
+    try {
+      await goalsApi.updateMapping(childId, { parentItemId: null });
+      onUpdate?.();
+    } catch {}
+  };
+
+  const handleUnlinkTodo = async (todoId: string) => {
+    try {
+      await todosApi.update(todoId, { linkedItemId: null });
+      onUpdate?.();
+    } catch {}
+  };
+
+  const handleUnlinkWorkLog = async (workLogId: string) => {
+    try {
+      await workLogsApi.update(workLogId, { linkedItemId: null });
+      onUpdate?.();
+    } catch {}
+  };
 
   if (compact) {
     return (
-      <div
-        onClick={onClick}
-        className={`px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
-      >
+      <div className="px-3 py-2.5 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow">
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium text-gray-800 truncate flex-1">{goal.title}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${status.color} ml-2 flex-shrink-0`}>
@@ -52,46 +115,211 @@ export default function GoalCard({ goal, onClick, compact = false }: GoalCardPro
   }
 
   return (
-    <div
-      onClick={onClick}
-      className={`bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
-    >
-      {goal.parentItem && (
-        <p className="text-xs text-gray-400 mb-1">상위: {goal.parentItem.title}</p>
-      )}
-      <div className="flex items-start justify-between mb-2">
-        <h3 className="text-sm font-semibold text-gray-900 flex-1">{goal.title}</h3>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${status.color} ml-2 flex-shrink-0`}>
-          {status.label}
-        </span>
+    <div className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow">
+      {/* 기본 정보 (항상 표시) */}
+      <div className="p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        {goal.parentItem && (
+          <p className="text-xs text-gray-400 mb-1">상위: {goal.parentItem.title}</p>
+        )}
+        <div className="flex items-start justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-900 flex-1">{goal.title}</h3>
+          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+            <span className={`text-xs px-2 py-0.5 rounded-full ${status.color}`}>
+              {status.label}
+            </span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </div>
+        </div>
+
+        {goal.summary && !expanded && (
+          <p className="text-xs text-gray-500 mb-2">{goal.summary}</p>
+        )}
+
+        <div className="mb-1">
+          <ProgressBar progress={goal.progress} size="md" />
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-gray-400">
+          {goal.startDate && <span>{goal.startDate.split('T')[0]}</span>}
+          {goal.startDate && goal.endDate && <span>~</span>}
+          {goal.endDate && <span>{goal.endDate.split('T')[0]}</span>}
+          {goal._count && (
+            <span className="ml-auto">
+              {goal._count.linkedWorkLogs > 0 && `기록 ${goal._count.linkedWorkLogs}`}
+              {goal._count.linkedWorkLogs > 0 && goal._count.linkedTodos > 0 && ' · '}
+              {goal._count.linkedTodos > 0 && `할일 ${goal._count.linkedTodos}`}
+            </span>
+          )}
+        </div>
       </div>
 
-      {goal.summary && (
-        <p className="text-xs text-gray-500 mb-2">{goal.summary}</p>
-      )}
+      {/* 확장 영역 */}
+      {expanded && (
+        <div className="border-t border-gray-100 p-4 space-y-4">
+          {/* 설명 */}
+          {goal.content && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-1">설명</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{goal.content}</p>
+            </div>
+          )}
 
-      <div className="mb-2">
-        <ProgressBar progress={goal.progress} size="md" />
-      </div>
+          {/* 진척사항 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-500">진척사항</h4>
+              {canEdit && !editingSummary && (
+                <button onClick={() => { setEditingSummary(true); setSummaryValue(goal.summary || ''); }}
+                  className="text-xs text-primary-600 hover:underline">수정</button>
+              )}
+            </div>
+            {editingSummary ? (
+              <div>
+                <textarea value={summaryValue} onChange={e => setSummaryValue(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg p-2 min-h-[48px] resize-y focus:ring-1 focus:ring-primary-500" />
+                <div className="flex gap-2 mt-1">
+                  <button onClick={handleSaveSummary} disabled={saving}
+                    className="px-3 py-1 bg-primary-600 text-white text-xs rounded-lg disabled:opacity-50">저장</button>
+                  <button onClick={() => setEditingSummary(false)}
+                    className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-lg">취소</button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">{goal.summary || '(없음)'}</p>
+            )}
+          </div>
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {tags.map(tag => <TagBadge key={tag} name={tag} />)}
+          {/* 진행률 + 상태 (canEdit이면 수정 가능) */}
+          {canEdit && (
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 block mb-1">진행률 ({progressValue}%)</label>
+                <input type="range" min={0} max={100} value={progressValue}
+                  onChange={e => setProgressValue(Number(e.target.value))}
+                  onMouseUp={() => handleSaveInline({ progress: progressValue })}
+                  onTouchEnd={() => handleSaveInline({ progress: progressValue })}
+                  className="w-full accent-primary-600" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">상태</label>
+                <select value={statusValue}
+                  onChange={e => { setStatusValue(e.target.value); handleSaveInline({ status: e.target.value }); }}
+                  className="px-2 py-1 text-xs border rounded-lg">
+                  {STATUS_OPTIONS.map(s => (
+                    <option key={s} value={s}>{STATUS_LABELS[s]?.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* 상위 목표 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-500">상위 목표</h4>
+              {canEdit && parentCandidates && parentCandidates.length > 0 && (
+                <button onClick={() => setShowParentSelect(!showParentSelect)}
+                  className="text-xs text-primary-600 hover:underline">변경</button>
+              )}
+            </div>
+            {goal.parentItem ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">{goal.parentItem.title}</span>
+                {canEdit && (
+                  <button onClick={() => handleChangeParent(null)}
+                    className="text-xs text-red-400 hover:text-red-600">해제</button>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">(없음)</span>
+            )}
+            {showParentSelect && parentCandidates && (
+              <select onChange={e => { if (e.target.value) handleChangeParent(e.target.value); }}
+                className="mt-1 w-full px-2 py-1 text-xs border rounded-lg">
+                <option value="">상위 목표 선택...</option>
+                {parentCandidates.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            )}
+          </div>
+
+          {/* 하위 목표 */}
+          {(goal.childItems && goal.childItems.length > 0) || (canEdit && unmappedChildren && unmappedChildren.length > 0) ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <h4 className="text-xs font-semibold text-gray-500">하위 목표 ({goal.childItems?.length || 0})</h4>
+                {canEdit && unmappedChildren && unmappedChildren.length > 0 && (
+                  <button onClick={() => setShowChildSelect(!showChildSelect)}
+                    className="text-xs text-primary-600 hover:underline">+ 추가</button>
+                )}
+              </div>
+              {goal.childItems?.map(child => (
+                <div key={child.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-gray-700 truncate block">{child.title}</span>
+                    <div className="mt-0.5"><ProgressBar progress={child.progress} size="sm" /></div>
+                  </div>
+                  {canEdit && (
+                    <button onClick={() => handleRemoveChild(child.id)}
+                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">제거</button>
+                  )}
+                </div>
+              ))}
+              {showChildSelect && unmappedChildren && (
+                <select onChange={e => { if (e.target.value) handleAddChild(e.target.value); }}
+                  className="mt-1 w-full px-2 py-1 text-xs border rounded-lg">
+                  <option value="">하위 목표 선택...</option>
+                  {unmappedChildren.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              )}
+            </div>
+          ) : null}
+
+          {/* 연결된 업무기록 */}
+          {goal.linkedWorkLogs && goal.linkedWorkLogs.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-1">연결된 업무기록 ({goal.linkedWorkLogs.length})</h4>
+              {goal.linkedWorkLogs.map(wl => (
+                <div key={wl.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
+                  <span className="text-sm text-gray-600 truncate">{wl.title}</span>
+                  {canEdit && (
+                    <button onClick={() => handleUnlinkWorkLog(wl.id)}
+                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 연결된 할일 */}
+          {goal.linkedTodos && goal.linkedTodos.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-1">연결된 할일 ({goal.linkedTodos.length})</h4>
+              {goal.linkedTodos.map(todo => (
+                <div key={todo.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
+                  <span className="text-sm text-gray-600 truncate">{todo.title}</span>
+                  {canEdit && (
+                    <button onClick={() => handleUnlinkTodo(todo.id)}
+                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 삭제 */}
+          {canEdit && (
+            <div className="pt-2 border-t border-gray-100">
+              <button onClick={async () => {
+                if (!confirm('이 목표를 삭제하시겠습니까?')) return;
+                try { await goalsApi.delete(goal.id); onUpdate?.(); } catch {}
+              }} className="text-xs text-red-500 hover:text-red-700">목표 삭제</button>
+            </div>
+          )}
         </div>
       )}
-
-      <div className="flex items-center gap-3 text-xs text-gray-400">
-        {goal.startDate && <span>{goal.startDate.split('T')[0]}</span>}
-        {goal.startDate && goal.endDate && <span>~</span>}
-        {goal.endDate && <span>{goal.endDate.split('T')[0]}</span>}
-        {goal._count && (
-          <span className="ml-auto">
-            {goal._count.linkedWorkLogs > 0 && `기록 ${goal._count.linkedWorkLogs}`}
-            {goal._count.linkedWorkLogs > 0 && goal._count.linkedTodos > 0 && ' · '}
-            {goal._count.linkedTodos > 0 && `할일 ${goal._count.linkedTodos}`}
-          </span>
-        )}
-      </div>
     </div>
   );
 }

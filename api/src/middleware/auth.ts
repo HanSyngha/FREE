@@ -39,6 +39,7 @@ export interface AuthenticatedRequest extends Request {
 
 export interface VisibleScope {
   level: 'SUPER' | 'TEAM' | 'GROUP' | 'PART' | 'PERSONAL';
+  editLevel: 'SUPER' | 'TEAM' | 'GROUP' | 'PART' | 'PERSONAL';
   teamId?: string;
   groupId?: string;
   partId?: string;
@@ -121,7 +122,7 @@ export function signToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
 }
 
 /**
- * JWT 토큰 인증 미들웨어 (OAuth JWT만 검증)
+ * JWT 토큰 인증 미들웨어
  */
 export function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers['authorization'];
@@ -151,7 +152,6 @@ export async function requireSuperAdmin(req: AuthenticatedRequest, res: Response
 
   if (isSuperAdmin(req.user.loginid)) { req.isSuperAdmin = true; next(); return; }
 
-  // DB Admin 테이블 체크
   const user = await prisma.user.findUnique({
     where: { loginid: req.user.loginid },
     select: { email: true },
@@ -203,9 +203,48 @@ export async function loadUser(req: AuthenticatedRequest, res: Response, next: N
 }
 
 /**
+ * 목표 수정 권한 미들웨어
+ * SuperAdmin/TeamAdmin → 통과
+ * OrgAdmin → 목표 level이 자기 editLevel 이하인지 확인
+ * 일반 사용자 → 403
+ */
+export function requireGoalEdit() {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+
+    const user = req.dbUser || await prisma.user.findUnique({ where: { loginid: req.user.loginid } });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    // SuperAdmin → 통과
+    if (isSuperAdmin(req.user.loginid)) { req.isSuperAdmin = true; next(); return; }
+    if ((user as any).email) {
+      const { isAdmin } = await checkAdminStatus((user as any).email);
+      if (isAdmin) { req.isSuperAdmin = true; next(); return; }
+    }
+
+    // TeamAdmin → 통과
+    const teamAdmins = await prisma.teamAdmin.findMany({ where: { userId: user.id } });
+    if (teamAdmins.length > 0) {
+      req.isTeamAdmin = true;
+      next();
+      return;
+    }
+
+    // OrgAdmin 체크
+    const orgAdmins = await prisma.orgAdmin.findMany({ where: { userId: user.id } });
+    if (orgAdmins.length > 0) {
+      req.orgAdminLevels = orgAdmins.map(oa => ({ level: oa.level, targetId: oa.targetId }));
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: '목표 수정 권한이 없습니다.' });
+  };
+}
+
+/**
  * OrgAdmin 권한 체크 미들웨어
  * 상위 레벨 권한도 하위 레벨 접근 허용 (TEAM > GROUP > PART)
- * SuperAdmin / TeamAdmin은 항상 통과
  */
 export function requireOrgAdmin(level: string, targetIdParam: string) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -246,11 +285,9 @@ export function requireOrgAdmin(level: string, targetIdParam: string) {
     const levelHierarchy: Record<string, number> = { TEAM: 3, GROUP: 2, PART: 1 };
     const requiredLevel = levelHierarchy[level] || 0;
 
-    // 직접 매칭 또는 상위 레벨 권한 보유 시 통과
     const hasAccess = orgAdmins.some(oa => {
       const oaLevel = levelHierarchy[oa.level] || 0;
       if (oaLevel >= requiredLevel && oa.targetId === targetId) return true;
-      // 상위 레벨이면 하위도 접근 가능 (같은 조직 내)
       if (oaLevel > requiredLevel) return true;
       return false;
     });
@@ -266,7 +303,8 @@ export function requireOrgAdmin(level: string, targetIdParam: string) {
 }
 
 /**
- * 사용자의 열람 가능 범위 반환
+ * 사용자의 열람/수정 가능 범위 반환
+ * View는 1단계 상위까지, Edit는 동등+하위
  */
 export async function getVisibleScope(userId: string): Promise<VisibleScope> {
   const user = await prisma.user.findUnique({
@@ -276,18 +314,18 @@ export async function getVisibleScope(userId: string): Promise<VisibleScope> {
       orgAdmins: true,
     },
   });
-  if (!user) return { level: 'PERSONAL' };
+  if (!user) return { level: 'PERSONAL', editLevel: 'PERSONAL' };
 
   // SuperAdmin → 전체
-  if (isSuperAdmin(user.loginid)) return { level: 'SUPER' };
+  if (isSuperAdmin(user.loginid)) return { level: 'SUPER', editLevel: 'SUPER' };
   if (user.email) {
     const { isAdmin } = await checkAdminStatus(user.email);
-    if (isAdmin) return { level: 'SUPER' };
+    if (isAdmin) return { level: 'SUPER', editLevel: 'SUPER' };
   }
 
-  // TeamAdmin → 사업부 내 모든 기록
+  // TeamAdmin → 팀 전체
   if (user.teamAdmins.length > 0) {
-    return { level: 'TEAM', teamId: user.teamId || undefined };
+    return { level: 'TEAM', editLevel: 'TEAM', teamId: user.teamId || undefined };
   }
 
   // OrgAdmin 중 최상위 레벨 반환
@@ -296,12 +334,22 @@ export async function getVisibleScope(userId: string): Promise<VisibleScope> {
     const highest = user.orgAdmins.reduce((max, oa) =>
       (levelOrder[oa.level] || 0) > (levelOrder[max.level] || 0) ? oa : max
     );
-    if (highest.level === 'TEAM') return { level: 'TEAM', teamId: highest.targetId };
-    if (highest.level === 'GROUP') return { level: 'GROUP', groupId: highest.targetId };
-    if (highest.level === 'PART') return { level: 'PART', partId: highest.targetId };
+
+    // View = 1단계 상위, Edit = 동등+하위
+    if (highest.level === 'TEAM') {
+      return { level: 'TEAM', editLevel: 'TEAM', teamId: highest.targetId };
+    }
+    if (highest.level === 'GROUP') {
+      return { level: 'TEAM', editLevel: 'GROUP', groupId: highest.targetId, teamId: user.teamId || undefined };
+    }
+    if (highest.level === 'PART') {
+      return { level: 'GROUP', editLevel: 'PART', partId: highest.targetId, groupId: user.groupId || undefined };
+    }
   }
 
-  // 일반 사용자 → 파트 내 기록
-  if (user.partId) return { level: 'PART', partId: user.partId };
-  return { level: 'PERSONAL' };
+  // 일반 사용자 → View는 파트, Edit는 개인
+  if (user.partId) {
+    return { level: 'PART', editLevel: 'PERSONAL', partId: user.partId };
+  }
+  return { level: 'PERSONAL', editLevel: 'PERSONAL' };
 }

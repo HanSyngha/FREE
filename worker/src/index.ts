@@ -736,8 +736,17 @@ const reportWorker = new Worker('report-generation', async (job) => {
   }
 }, { connection, concurrency: 10 });
 
-reportWorker.on('completed', (job) => {
+reportWorker.on('completed', async (job) => {
   console.log(`[Worker] Job ${job.id} completed`);
+  // 보고서 완료 후 해당 팀 진행률 업데이트 트리거
+  if (job.data.teamId) {
+    try {
+      await progressQueue.add(`post-report-${job.data.teamId}`, { teamId: job.data.teamId });
+      console.log(`[Worker] Progress update triggered after report for team ${job.data.teamId}`);
+    } catch (e) {
+      console.error(`[Worker] Failed to trigger progress update:`, e);
+    }
+  }
 });
 
 reportWorker.on('failed', (job, err) => {

@@ -1,7 +1,8 @@
 /**
- * WorkLog Block Component (구 ItemBlock)
+ * WorkLog Block Component (구 ItemBlock) + 매핑 편집
  */
 import { useState } from 'react';
+import { workLogsApi } from '../../services/api';
 
 interface WorkLogBlockProps {
   item: {
@@ -16,6 +17,9 @@ interface WorkLogBlockProps {
   deletable?: boolean;
   onUpdate?: (data: { title?: string; content?: string; link?: string; date?: string }) => void;
   onDelete?: () => void;
+  onRefresh?: () => void;
+  /** 매핑 가능한 목표 후보 목록 */
+  goalCandidates?: Array<{ id: string; title: string }>;
 }
 
 function isSafeUrl(url: string): boolean {
@@ -27,12 +31,13 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-export default function WorkLogBlock({ item, editable = false, deletable = false, onUpdate, onDelete }: WorkLogBlockProps) {
+export default function WorkLogBlock({ item, editable = false, deletable = false, onUpdate, onDelete, onRefresh, goalCandidates }: WorkLogBlockProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
   const [editContent, setEditContent] = useState(item.content);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkValue, setLinkValue] = useState(item.link || '');
+  const [showMappingSelect, setShowMappingSelect] = useState(false);
 
   const handleSave = () => {
     onUpdate?.({ title: editTitle, content: editContent });
@@ -54,10 +59,17 @@ export default function WorkLogBlock({ item, editable = false, deletable = false
     setShowLinkInput(false);
   };
 
+  const handleChangeMapping = async (linkedItemId: string | null) => {
+    try {
+      await workLogsApi.update(item.id, { linkedItemId });
+      setShowMappingSelect(false);
+      onRefresh?.();
+    } catch {}
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow">
       {editing ? (
-        /* 편집 모드 */
         <div>
           <input
             value={editTitle}
@@ -77,7 +89,6 @@ export default function WorkLogBlock({ item, editable = false, deletable = false
           </div>
         </div>
       ) : (
-        /* 표시 모드 */
         <div>
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
@@ -118,14 +129,37 @@ export default function WorkLogBlock({ item, editable = false, deletable = false
 
           <p className="text-sm text-gray-600 whitespace-pre-wrap">{item.content}</p>
 
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className="text-xs text-gray-400">{item.date.split('T')[0]}</span>
-            {item.linkedItem && (
-              <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
+            {item.linkedItem ? (
+              <button
+                onClick={() => { if (editable) setShowMappingSelect(!showMappingSelect); }}
+                className={`text-xs px-1.5 py-0.5 rounded ${editable ? 'text-primary-600 bg-primary-50 hover:bg-primary-100 cursor-pointer' : 'text-primary-500 bg-primary-50'}`}>
                 {item.linkedItem.title}
-              </span>
-            )}
+                {editable && <span className="ml-1 text-primary-400">x</span>}
+              </button>
+            ) : editable && goalCandidates && goalCandidates.length > 0 ? (
+              <button
+                onClick={() => setShowMappingSelect(!showMappingSelect)}
+                className="text-xs text-gray-400 hover:text-primary-600 px-1.5 py-0.5 rounded border border-dashed border-gray-300 hover:border-primary-400">
+                + 목표 연결
+              </button>
+            ) : null}
           </div>
+
+          {/* 매핑 드롭다운 */}
+          {showMappingSelect && editable && goalCandidates && (
+            <div className="mt-2">
+              <select
+                onChange={e => handleChangeMapping(e.target.value || null)}
+                className="w-full px-2 py-1 text-xs border rounded-lg">
+                <option value="">매핑 해제</option>
+                {goalCandidates.map(g => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* 링크 입력 팝업 */}
           {showLinkInput && editable && (
