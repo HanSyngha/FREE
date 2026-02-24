@@ -28,13 +28,17 @@ export default function GoalDashboard() {
     );
   }
 
-  const tagProgress = dashData?.tagProgress || [];
-  const goals = dashData?.goals || [];
+  const tagProgress = (dashData?.tagProgress || []).map((t: any) => ({
+    name: t.tag,
+    progress: t.avgProgress,
+    goalCount: t.count,
+  }));
+  const goals = dashData?.ganttData || [];
 
   // Gantt용 아이템 변환
   const ganttItems = goals
     .filter((g: any) => g.startDate && g.endDate)
-    .filter((g: any) => !selectedTag || g.tags?.some((t: any) => t.name === selectedTag))
+    .filter((g: any) => !selectedTag || g.tags?.includes(selectedTag))
     .map((g: any) => ({
       id: g.id,
       title: g.title,
@@ -46,7 +50,7 @@ export default function GoalDashboard() {
 
   // 태그 필터링된 목표
   const filteredGoals = selectedTag
-    ? goals.filter((g: any) => g.tags?.some((t: any) => t.name === selectedTag))
+    ? goals.filter((g: any) => g.tags?.includes(selectedTag))
     : goals;
 
   return (

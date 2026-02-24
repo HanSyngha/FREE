@@ -15,6 +15,7 @@ interface GoalCardProps {
     endDate?: string | null;
     summary?: string | null;
     itemTags?: Array<{ tag: { name: string } }>;
+    tags?: string[];
     childItems?: Array<{ id: string; title: string; progress: number; status: string }>;
     _count?: { linkedWorkLogs: number; linkedTodos: number };
   };
@@ -30,7 +31,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export default function GoalCard({ goal, onClick, compact = false }: GoalCardProps) {
   const status = STATUS_LABELS[goal.status] || STATUS_LABELS.PLANNED;
-  const tags = goal.itemTags?.map(it => it.tag.name) || [];
+  const tags = goal.tags || goal.itemTags?.map(it => it.tag.name) || [];
 
   if (compact) {
     return (
