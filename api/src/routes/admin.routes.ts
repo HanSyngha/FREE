@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, loadUser } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest, requireSuperAdmin, requireTeamAdminOrHigher, loadUser, getVisibleScope } from '../middleware/auth.js';
 import { syncModelsFromEndpoint } from '../services/llm.service.js';
 import { encrypt } from '../utils/encryption.js';
 import { getKSTMidnight, parseKSTDate } from '../utils/date.js';
@@ -19,6 +19,9 @@ const redisConfig = parseRedisUrl(process.env.REDIS_URL || 'redis://localhost:15
 const reportQueue = new Queue('report-generation', {
   connection: { host: redisConfig.host, port: redisConfig.port },
 });
+const progressQueue = new Queue('progress-update', {
+  connection: { host: redisConfig.host, port: redisConfig.port },
+});
 
 export const adminRoutes = Router();
 
@@ -28,10 +31,8 @@ adminRoutes.post('/llm/endpoint', authenticateToken, requireSuperAdmin, loadUser
     const { endpoint, apiKey } = req.body;
     if (!endpoint) { res.status(400).json({ error: 'endpoint is required' }); return; }
 
-    // 기존 config 비활성화
     await prisma.lLMConfig.updateMany({ where: { isActive: true }, data: { isActive: false } });
 
-    // 새 config 생성 (modelId는 sync 후 설정)
     const config = await prisma.lLMConfig.create({
       data: {
         endpoint,
@@ -61,40 +62,27 @@ adminRoutes.post('/llm/sync', authenticateToken, requireSuperAdmin, loadUser, as
     if (!targetEndpoint) { res.status(400).json({ error: 'No endpoint configured' }); return; }
 
     const models = await syncModelsFromEndpoint(
-      targetEndpoint,
-      apiKey || '',
-      {
-        loginid: req.user!.loginid,
-        username: req.user!.username,
-        deptname: req.user!.deptname,
-      }
+      targetEndpoint, apiKey || '',
+      { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
     );
 
-    // 동기화된 모델 목록에 없는 기존 활성 config 비활성화
     const availableModelIds = models.map(m => m.id);
     const activeConfig = await prisma.lLMConfig.findFirst({ where: { isActive: true } });
 
     if (activeConfig && !availableModelIds.includes(activeConfig.modelId)) {
       console.log(`[Sync] Active model '${activeConfig.modelId}' no longer available, deactivating...`);
-      await prisma.lLMConfig.update({
-        where: { id: activeConfig.id },
-        data: { isActive: false },
-      });
+      await prisma.lLMConfig.update({ where: { id: activeConfig.id }, data: { isActive: false } });
 
-      // 사용 가능한 첫 번째 모델로 자동 전환
       if (models.length > 0) {
         const first = models[0];
         await prisma.lLMConfig.create({
           data: {
             endpoint: targetEndpoint,
             apiKey: apiKey ? encrypt(apiKey) : '',
-            modelId: first.id,
-            modelName: first.displayName,
-            isActive: true,
-            lastSyncAt: new Date(),
+            modelId: first.id, modelName: first.displayName,
+            isActive: true, lastSyncAt: new Date(),
           },
         });
-        console.log(`[Sync] Auto-switched to model: ${first.displayName} (${first.id})`);
       }
     }
 
@@ -110,26 +98,17 @@ adminRoutes.get('/llm/models', authenticateToken, requireSuperAdmin, async (req:
   try {
     const configs = await prisma.lLMConfig.findMany({
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true, endpoint: true, modelId: true, modelName: true,
-        isActive: true, lastSyncAt: true, createdAt: true,
-      },
+      select: { id: true, endpoint: true, modelId: true, modelName: true, isActive: true, lastSyncAt: true, createdAt: true },
     });
 
-    // 현재 활성 endpoint에서 models 가져오기
     const latestConfig = configs[0];
     let availableModels: any[] = [];
 
     if (latestConfig) {
       try {
         availableModels = await syncModelsFromEndpoint(
-          latestConfig.endpoint,
-          '',
-          {
-            loginid: req.user!.loginid,
-            username: req.user!.username,
-            deptname: req.user!.deptname,
-          }
+          latestConfig.endpoint, '',
+          { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
         );
       } catch { /* ignore sync errors */ }
     }
@@ -147,40 +126,26 @@ adminRoutes.put('/llm/activate/:modelId', authenticateToken, requireSuperAdmin, 
     const modelId = req.params.modelId as string;
     const { modelName, endpoint, apiKey } = req.body;
 
-    // endpoint가 없으면 기존 config나 env에서 가져오기
     let targetEndpoint = endpoint;
     let targetApiKey = apiKey;
     if (!targetEndpoint) {
-      const existingConfig = await prisma.lLMConfig.findFirst({
-        where: { isActive: true },
-      }) || await prisma.lLMConfig.findFirst({
-        orderBy: { createdAt: 'desc' },
-      });
+      const existingConfig = await prisma.lLMConfig.findFirst({ where: { isActive: true } })
+        || await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
       targetEndpoint = existingConfig?.endpoint || process.env.LLM_PROXY_URL || '';
-      // apiKey도 지정 안 됐으면 기존 것 유지
-      if (!targetApiKey && existingConfig?.apiKey) {
-        targetApiKey = '__KEEP_EXISTING__';
-      }
+      if (!targetApiKey && existingConfig?.apiKey) targetApiKey = '__KEEP_EXISTING__';
     }
 
-    if (!targetEndpoint) {
-      res.status(400).json({ error: 'endpoint is required' });
-      return;
-    }
+    if (!targetEndpoint) { res.status(400).json({ error: 'endpoint is required' }); return; }
 
-    // 기존 모두 비활성화
     await prisma.lLMConfig.updateMany({ where: { isActive: true }, data: { isActive: false } });
 
-    // 새 config 생성 또는 업데이트
     const existingForKey = await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
     const config = await prisma.lLMConfig.create({
       data: {
         endpoint: targetEndpoint,
         apiKey: targetApiKey === '__KEEP_EXISTING__' ? (existingForKey?.apiKey || '') : (targetApiKey ? encrypt(targetApiKey) : ''),
-        modelId,
-        modelName: modelName || modelId,
-        isActive: true,
-        lastSyncAt: new Date(),
+        modelId, modelName: modelName || modelId,
+        isActive: true, lastSyncAt: new Date(),
       },
     });
 
@@ -196,11 +161,7 @@ adminRoutes.get('/teams', authenticateToken, requireSuperAdmin, async (_req: Aut
   try {
     const teams = await prisma.team.findMany({
       include: {
-        groups: {
-          include: {
-            parts: true,
-          },
-        },
+        groups: { include: { parts: true } },
         users: {
           select: {
             id: true, loginid: true, username: true,
@@ -210,14 +171,11 @@ adminRoutes.get('/teams', authenticateToken, requireSuperAdmin, async (_req: Aut
           },
         },
         teamAdmins: {
-          include: {
-            user: { select: { id: true, loginid: true, username: true } },
-          },
+          include: { user: { select: { id: true, loginid: true, username: true } } },
         },
       },
       orderBy: { name: 'asc' },
     });
-
     res.json({ teams });
   } catch (error) {
     console.error('Get teams error:', error);
@@ -231,15 +189,10 @@ adminRoutes.post('/team-admin', authenticateToken, requireSuperAdmin, async (req
     const { userId, teamId } = req.body;
     if (!userId || !teamId) { res.status(400).json({ error: 'userId and teamId are required' }); return; }
 
-    const existing = await prisma.teamAdmin.findUnique({
-      where: { userId_teamId: { userId, teamId } },
-    });
+    const existing = await prisma.teamAdmin.findUnique({ where: { userId_teamId: { userId, teamId } } });
     if (existing) { res.status(409).json({ error: '이미 Team Admin입니다.' }); return; }
 
-    const teamAdmin = await prisma.teamAdmin.create({
-      data: { userId, teamId },
-    });
-
+    const teamAdmin = await prisma.teamAdmin.create({ data: { userId, teamId } });
     res.json({ success: true, teamAdmin });
   } catch (error) {
     console.error('Add team admin error:', error);
@@ -250,8 +203,7 @@ adminRoutes.post('/team-admin', authenticateToken, requireSuperAdmin, async (req
 // DELETE /admin/team-admin/:id - Team Admin 해제
 adminRoutes.delete('/team-admin/:id', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const id = req.params.id as string;
-    await prisma.teamAdmin.delete({ where: { id } });
+    await prisma.teamAdmin.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {
     console.error('Remove team admin error:', error);
@@ -263,107 +215,48 @@ adminRoutes.delete('/team-admin/:id', authenticateToken, requireSuperAdmin, asyn
 adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { loginid, items } = req.body;
-    if (!loginid || typeof loginid !== 'string') {
-      res.status(400).json({ error: 'loginid is required' }); return;
-    }
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      res.status(400).json({ error: 'items array is required' });
-      return;
-    }
-    if (items.length > 100) {
-      res.status(400).json({ error: '한 번에 최대 100개 항목까지 입력 가능합니다.' });
-      return;
-    }
+    if (!loginid || typeof loginid !== 'string') { res.status(400).json({ error: 'loginid is required' }); return; }
+    if (!items || !Array.isArray(items) || items.length === 0) { res.status(400).json({ error: 'items array is required' }); return; }
+    if (items.length > 100) { res.status(400).json({ error: '한 번에 최대 100개 항목까지 입력 가능합니다.' }); return; }
 
     const user = await prisma.user.findUnique({ where: { loginid } });
-    if (!user) {
-      res.status(404).json({
-        error: `사용자를 찾을 수 없습니다: ${loginid}. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
-      });
-      return;
-    }
-    if (!user.teamId) {
-      res.status(400).json({
-        error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다. 먼저 웹에서 로그인하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
-      });
-      return;
-    }
-    if (!user.groupId || !user.partId) {
-      res.status(400).json({
-        error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다. 먼저 웹에서 온보딩을 완료하세요.`,
-        link: 'http://a2g.samsungds.net:15001',
-      });
-      return;
-    }
+    if (!user) { res.status(404).json({ error: `사용자를 찾을 수 없습니다: ${loginid}` }); return; }
+    if (!user.teamId) { res.status(400).json({ error: `해당 사용자(${loginid})의 팀이 배정되지 않았습니다.` }); return; }
+    if (!user.groupId || !user.partId) { res.status(400).json({ error: `해당 사용자(${loginid})의 그룹/파트 설정이 필요합니다.` }); return; }
 
-    const personalSpace = await prisma.space.findFirst({
-      where: { type: 'PERSONAL', ownerId: user.id },
-    });
-    if (!personalSpace) {
-      res.status(500).json({ error: `사용자(${loginid})의 Personal space가 없습니다.` });
-      return;
-    }
+    const personalSpace = await prisma.space.findFirst({ where: { type: 'PERSONAL', ownerId: user.id } });
+    if (!personalSpace) { res.status(500).json({ error: `사용자(${loginid})의 Personal space가 없습니다.` }); return; }
 
     const todayDate = getKSTMidnight();
     const minDate = new Date(todayDate);
     minDate.setDate(minDate.getDate() - 29);
 
-    // 사전 검증 (DB 쓰기 전에 모든 항목 유효성 확인)
     for (const item of items) {
-      if (!item || typeof item !== 'object') {
-        res.status(400).json({ error: 'items 배열의 각 요소는 객체여야 합니다.' });
-        return;
-      }
-      if (!item.title || !item.content) {
-        res.status(400).json({ error: 'Each item must have title and content' });
-        return;
-      }
+      if (!item || typeof item !== 'object') { res.status(400).json({ error: 'items 배열의 각 요소는 객체여야 합니다.' }); return; }
+      if (!item.title || !item.content) { res.status(400).json({ error: 'Each item must have title and content' }); return; }
       if (item.date) {
         const d = parseKSTDate(item.date);
-        if (isNaN(d.getTime())) {
-          res.status(400).json({ error: `유효하지 않은 날짜 형식입니다: ${item.date}` });
-          return;
-        }
-        if (d > todayDate || d < minDate) {
-          res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date}` });
-          return;
+        if (isNaN(d.getTime()) || d > todayDate || d < minDate) {
+          res.status(400).json({ error: `유효하지 않은 날짜입니다: ${item.date}` }); return;
         }
       }
     }
 
-    // 트랜잭션으로 전체 생성 (중간 실패 시 롤백)
     const createdItems = await prisma.$transaction(async (tx) => {
       const results = [];
       for (const item of items) {
         const itemDate = item.date ? parseKSTDate(item.date) : todayDate;
-
         const created = await tx.workLog.create({
-          data: {
-            userId: user.id,
-            spaceId: personalSpace.id,
-            title: String(item.title).slice(0, 500),
-            content: String(item.content).slice(0, 10000),
-            date: itemDate,
-          },
+          data: { userId: user.id, spaceId: personalSpace.id, title: String(item.title).slice(0, 500), content: String(item.content).slice(0, 10000), date: itemDate },
         });
         results.push(created);
-
         await tx.activityLog.create({
-          data: {
-            userId: user.id,
-            action: 'CREATE_WORKLOG',
-            targetType: 'WORKLOG',
-            targetId: created.id,
-            details: `[Admin] ${created.title}`,
-          },
+          data: { userId: user.id, action: 'CREATE_WORKLOG', targetType: 'WORKLOG', targetId: created.id, details: `[Admin] ${created.title}` },
         });
       }
       return results;
     });
 
-    console.log(`[Admin] ${createdItems.length} items created for ${loginid} by ${req.user?.loginid}`);
     res.json({ success: true, items: createdItems, count: createdItems.length });
   } catch (error) {
     console.error('Admin create items error:', error);
@@ -372,30 +265,138 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
 });
 
 // POST /admin/trigger-report - 수동 보고서 생성 트리거
-adminRoutes.post('/trigger-report', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+adminRoutes.post('/trigger-report', authenticateToken, requireTeamAdminOrHigher, async (req: AuthenticatedRequest, res) => {
   try {
     const { teamId } = req.body;
-    if (!teamId) { res.status(400).json({ error: 'teamId is required' }); return; }
 
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
+    if (teamId) {
+      // 특정 팀
+      const team = await prisma.team.findUnique({ where: { id: teamId } });
+      if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
 
-    // 이미 진행 중인 작업이 있는지 확인
-    const inProgress = await prisma.reportJob.findFirst({
-      where: { teamId, status: 'IN_PROGRESS' },
-    });
-    if (inProgress) {
-      res.status(409).json({ error: '이미 해당 팀의 보고서 생성이 진행 중입니다.' });
-      return;
+      const inProgress = await prisma.reportJob.findFirst({ where: { teamId, status: 'IN_PROGRESS' } });
+      if (inProgress) { res.status(409).json({ error: '이미 해당 팀의 보고서 생성이 진행 중입니다.' }); return; }
+
+      await reportQueue.add(`manual-report-${team.id}`, { teamId });
+      console.log(`[Admin] Manual report triggered for team: ${team.name} by ${req.user?.loginid}`);
+      res.json({ success: true, message: `${team.name} 팀 보고서 생성이 시작되었습니다.` });
+    } else {
+      // 전체 팀 (SuperAdmin만)
+      if (!req.isSuperAdmin) { res.status(403).json({ error: 'Super admin required for all-team trigger' }); return; }
+      const teams = await prisma.team.findMany();
+      for (const team of teams) {
+        await reportQueue.add(`manual-report-${team.id}`, { teamId: team.id });
+      }
+      res.json({ success: true, message: `${teams.length}개 팀 보고서 생성이 시작되었습니다.` });
     }
-
-    // BullMQ 큐에 작업 추가 (worker의 reportWorker가 처리)
-    await reportQueue.add(`manual-report-${team.id}`, { teamId });
-
-    console.log(`[Admin] Manual report triggered for team: ${team.name} by ${req.user?.loginid}`);
-    res.json({ success: true, message: `${team.name} 팀 보고서 생성이 시작되었습니다.` });
   } catch (error) {
     console.error('Trigger report error:', error);
     res.status(500).json({ error: 'Failed to trigger report generation' });
+  }
+});
+
+// POST /admin/trigger-progress - 수동 진행률 업데이트 트리거
+adminRoutes.post('/trigger-progress', authenticateToken, requireTeamAdminOrHigher, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { teamId } = req.body;
+
+    if (teamId) {
+      await progressQueue.add(`manual-progress-${teamId}`, { teamId });
+      res.json({ success: true, message: '진행률 업데이트가 시작되었습니다.' });
+    } else {
+      if (!req.isSuperAdmin) { res.status(403).json({ error: 'Super admin required for all-team trigger' }); return; }
+      await progressQueue.add('manual-progress-all', { type: 'scheduled' });
+      res.json({ success: true, message: '전체 팀 진행률 업데이트가 시작되었습니다.' });
+    }
+  } catch (error) {
+    console.error('Trigger progress error:', error);
+    res.status(500).json({ error: 'Failed to trigger progress update' });
+  }
+});
+
+// ========== LLM Operation Config API ==========
+
+// GET /admin/llm-operations - 모든 작업별 모델 설정
+adminRoutes.get('/llm-operations', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const operations = await prisma.lLMOperationConfig.findMany({
+      orderBy: { operation: 'asc' },
+    });
+
+    // 사용 가능 모델 목록도 반환
+    let availableModels: any[] = [];
+    const latestConfig = await prisma.lLMConfig.findFirst({ orderBy: { createdAt: 'desc' } });
+    if (latestConfig) {
+      try {
+        availableModels = await syncModelsFromEndpoint(
+          latestConfig.endpoint, '',
+          { loginid: req.user!.loginid, username: req.user!.username, deptname: req.user!.deptname }
+        );
+      } catch { /* ignore */ }
+    }
+
+    const operationTypes = [
+      { key: 'PARSE_GOALS', label: '조직 목표 분리' },
+      { key: 'PARSE_TEXT', label: '개인 텍스트 → WorkLog+Todo' },
+      { key: 'LINK_TODO', label: 'Todo → 목표 연결' },
+      { key: 'AUTO_MAP', label: '생성/수정 시 양방향 매핑' },
+      { key: 'UPDATE_PROGRESS', label: '진행률 자동 업데이트' },
+      { key: 'REPORT', label: '보고서 생성' },
+    ];
+
+    res.json({ operations, operationTypes, availableModels });
+  } catch (error) {
+    console.error('Get LLM operations error:', error);
+    res.status(500).json({ error: 'Failed to get LLM operations' });
+  }
+});
+
+// PUT /admin/llm-operations/:operation - 특정 작업의 모델 변경
+adminRoutes.put('/llm-operations/:operation', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { operation } = req.params;
+    const { modelId } = req.body;
+    if (!modelId) { res.status(400).json({ error: 'modelId is required' }); return; }
+
+    const config = await prisma.lLMOperationConfig.upsert({
+      where: { operation },
+      update: { modelId },
+      create: { operation, modelId },
+    });
+
+    res.json({ success: true, config });
+  } catch (error) {
+    console.error('Update LLM operation error:', error);
+    res.status(500).json({ error: 'Failed to update LLM operation' });
+  }
+});
+
+// DELETE /admin/llm-operations/:operation - 특정 작업 설정 삭제 (기본 모델로 복귀)
+adminRoutes.delete('/llm-operations/:operation', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { operation } = req.params;
+    await prisma.lLMOperationConfig.delete({ where: { operation } }).catch(() => {});
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete LLM operation error:', error);
+    res.status(500).json({ error: 'Failed to delete LLM operation' });
+  }
+});
+
+// GET /admin/auth/me-scope - 현재 사용자의 권한 범위 (프론트엔드용)
+adminRoutes.get('/auth/me-scope', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.dbUser!;
+    const visibleScope = await getVisibleScope(user.id);
+
+    const orgAdmins = await prisma.orgAdmin.findMany({
+      where: { userId: user.id },
+      select: { level: true, targetId: true },
+    });
+
+    res.json({ visibleScope, orgAdminLevels: orgAdmins });
+  } catch (error) {
+    console.error('Get me scope error:', error);
+    res.status(500).json({ error: 'Failed to get scope' });
   }
 });

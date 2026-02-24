@@ -59,7 +59,7 @@ export const onboardingApi = {
 // ==================== WorkLogs ====================
 export const workLogsApi = {
   create: (text: string, date?: string) => api.post('/worklogs', { text, date }),
-  update: (id: string, data: { title?: string; content?: string; link?: string; date?: string }) =>
+  update: (id: string, data: { title?: string; content?: string; link?: string; date?: string; linkedItemId?: string | null }) =>
     api.put(`/worklogs/${id}`, data),
   delete: (id: string) => api.delete(`/worklogs/${id}`),
 };
@@ -69,19 +69,17 @@ export const itemsApi = workLogsApi; // 하위 호환
 export const goalsApi = {
   create: (text: string, level: string, ownerId: string) =>
     api.post('/goals', { text, level, ownerId }),
-  getAll: (params?: { level?: string; ownerId?: string; tag?: string; status?: string }) =>
+  getAll: (params?: { level?: string; ownerId?: string; status?: string }) =>
     api.get('/goals', { params }),
   getById: (id: string) => api.get(`/goals/${id}`),
   update: (id: string, data: {
     title?: string; content?: string; status?: string;
     startDate?: string | null; endDate?: string | null;
-    progress?: number; summary?: string; tags?: string[];
+    progress?: number; summary?: string;
   }) => api.put(`/goals/${id}`, data),
   delete: (id: string) => api.delete(`/goals/${id}`),
   updateMapping: (id: string, data: { parentItemId?: string | null; childItemIds?: string[] }) =>
     api.put(`/goals/${id}/mapping`, data),
-  getTags: () => api.get('/goals/tags'),
-  getDashboard: () => api.get('/goals/dashboard'),
 };
 
 // ==================== Todos ====================
@@ -137,7 +135,11 @@ export const adminApi = {
   addTeamAdmin: (userId: string, teamId: string) =>
     api.post('/admin/team-admin', { userId, teamId }),
   removeTeamAdmin: (id: string) => api.delete(`/admin/team-admin/${id}`),
-  triggerReport: (teamId: string) => api.post('/admin/trigger-report', { teamId }),
+  triggerReport: (teamId?: string) => api.post('/admin/trigger-report', teamId ? { teamId } : {}),
+  triggerProgress: (teamId?: string) => api.post('/admin/trigger-progress', teamId ? { teamId } : {}),
+  getLLMOperations: () => api.get('/admin/llm-operations'),
+  setLLMOperation: (operation: string, modelId: string) => api.put(`/admin/llm-operations/${operation}`, { modelId }),
+  deleteLLMOperation: (operation: string) => api.delete(`/admin/llm-operations/${operation}`),
   createItems: (loginid: string, items: Array<{ title: string; content: string; date?: string }>) =>
     api.post('/admin/worklogs', { loginid, items }),
 };

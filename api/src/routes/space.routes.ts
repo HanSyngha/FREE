@@ -139,7 +139,7 @@ spaceRoutes.get('/part/:partId', authenticateToken, loadUser, generalLimit, asyn
     const goals = await prisma.item.findMany({
       where: { level: 'PART', ownerId: partId },
       include: {
-        itemTags: { include: { tag: true } },
+
         parentItem: { select: { id: true, title: true, level: true } },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
@@ -196,7 +196,7 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
     const goals = await prisma.item.findMany({
       where: { level: 'GROUP', ownerId: groupId },
       include: {
-        itemTags: { include: { tag: true } },
+
         childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
         parentItem: { select: { id: true, title: true, level: true } },
       },
@@ -271,7 +271,7 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
     const goals = await prisma.item.findMany({
       where: { level: 'TEAM', ownerId: user.teamId },
       include: {
-        itemTags: { include: { tag: true } },
+
         childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
         parentItem: { select: { id: true, title: true, level: true } },
       },
