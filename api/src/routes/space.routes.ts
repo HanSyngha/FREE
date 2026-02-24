@@ -138,8 +138,17 @@ spaceRoutes.get('/part/:partId', authenticateToken, loadUser, generalLimit, asyn
     const goals = await prisma.item.findMany({
       where: { level: 'PART', ownerId: partId },
       include: {
-
         parentItem: { select: { id: true, title: true, level: true } },
+        linkedTodos: {
+          select: { id: true, title: true, completed: true, endDate: true, user: { select: { id: true, username: true } } },
+          orderBy: { completed: 'asc' },
+        },
+        linkedWorkLogs: {
+          select: { id: true, title: true, date: true, user: { select: { id: true, username: true } } },
+          orderBy: { date: 'desc' },
+          take: 20,
+        },
+        orgWorkLogs: { orderBy: { date: 'desc' }, take: 7 },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
@@ -195,12 +204,24 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
     const goals = await prisma.item.findMany({
       where: { level: 'GROUP', ownerId: groupId },
       include: {
-
-        childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+        childItems: { select: { id: true, title: true, progress: true, status: true, level: true, ownerId: true } },
         parentItem: { select: { id: true, title: true, level: true } },
+        orgWorkLogs: { orderBy: { date: 'desc' }, take: 7 },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
+
+    // childOrgNames: partId → partName
+    const partOwnerIds = new Set<string>();
+    goals.forEach(g => g.childItems.forEach(c => { if (c.level === 'PART') partOwnerIds.add(c.ownerId); }));
+    const childOrgNames: Record<string, string> = {};
+    if (partOwnerIds.size > 0) {
+      const partsForNames = await prisma.part.findMany({
+        where: { id: { in: [...partOwnerIds] } },
+        select: { id: true, name: true },
+      });
+      partsForNames.forEach(p => { childOrgNames[p.id] = p.name; });
+    }
 
     const space = await prisma.space.findFirst({ where: { type: 'GROUP', ownerId: groupId } });
     const reports = space ? await prisma.report.findMany({
@@ -208,10 +229,64 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
       orderBy: { createdAt: 'desc' },
     }) : [];
 
-    res.json({ group, parts, items: workLogs, workLogs, goals, reports, space });
+    res.json({ group, parts, items: workLogs, workLogs, goals, childOrgNames, reports, space });
   } catch (error) {
     console.error('Get group space error:', error);
     res.status(500).json({ error: 'Failed to get group space' });
+  }
+});
+
+// GET /spaces/bu/:buId - 사업부 Space
+spaceRoutes.get('/bu/:buId', authenticateToken, loadUser, generalLimit, async (req: AuthenticatedRequest, res) => {
+  try {
+    const buId = req.params.buId as string;
+
+    const bu = await prisma.businessUnit.findUnique({
+      where: { id: buId },
+      include: {
+        teams: {
+          orderBy: { name: 'asc' },
+          include: {
+            groups: {
+              orderBy: { name: 'asc' },
+              include: { parts: { orderBy: { name: 'asc' } } },
+            },
+          },
+        },
+      },
+    });
+    if (!bu) { res.status(404).json({ error: 'Business unit not found' }); return; }
+
+    const goals = await prisma.item.findMany({
+      where: { level: 'BU', ownerId: buId },
+      include: {
+        childItems: {
+          select: { id: true, title: true, progress: true, status: true, level: true, ownerId: true },
+        },
+        orgWorkLogs: {
+          orderBy: { date: 'desc' },
+          take: 7,
+        },
+      },
+      orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
+    });
+
+    // 하위 Team 목표의 조직명 맵
+    const teamGoalOwnerIds = new Set<string>();
+    goals.forEach(g => g.childItems.forEach(c => teamGoalOwnerIds.add(c.ownerId)));
+    const childOrgNames: Record<string, string> = {};
+    if (teamGoalOwnerIds.size > 0) {
+      const teams = await prisma.team.findMany({
+        where: { id: { in: [...teamGoalOwnerIds] } },
+        select: { id: true, name: true },
+      });
+      teams.forEach(t => { childOrgNames[t.id] = t.name; });
+    }
+
+    res.json({ bu, goals, childOrgNames });
+  } catch (error) {
+    console.error('Get BU space error:', error);
+    res.status(500).json({ error: 'Failed to get BU space' });
   }
 });
 
@@ -224,6 +299,7 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
     const team = await prisma.team.findUnique({
       where: { id: user.teamId },
       include: {
+        businessUnit: true,
         groups: {
           orderBy: { name: 'asc' },
           include: {
@@ -270,12 +346,24 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
     const goals = await prisma.item.findMany({
       where: { level: 'TEAM', ownerId: user.teamId },
       include: {
-
-        childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+        childItems: { select: { id: true, title: true, progress: true, status: true, level: true, ownerId: true } },
         parentItem: { select: { id: true, title: true, level: true } },
+        orgWorkLogs: { orderBy: { date: 'desc' }, take: 7 },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
+
+    // childOrgNames: groupId → groupName
+    const groupOwnerIds = new Set<string>();
+    goals.forEach(g => g.childItems.forEach(c => { if (c.level === 'GROUP') groupOwnerIds.add(c.ownerId); }));
+    const childOrgNames: Record<string, string> = {};
+    if (groupOwnerIds.size > 0) {
+      const groups = await prisma.group.findMany({
+        where: { id: { in: [...groupOwnerIds] } },
+        select: { id: true, name: true },
+      });
+      groups.forEach(g => { childOrgNames[g.id] = g.name; });
+    }
 
     const space = await prisma.space.findFirst({ where: { type: 'TEAM', ownerId: user.teamId } });
     const reports = space ? await prisma.report.findMany({
@@ -293,7 +381,7 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
       include: { author: { select: { username: true, loginid: true } } },
     });
 
-    res.json({ team, items: workLogs, workLogs, goals, reports, space, failedJob, announcement });
+    res.json({ team, items: workLogs, workLogs, goals, childOrgNames, reports, space, failedJob, announcement });
   } catch (error) {
     console.error('Get team space error:', error);
     res.status(500).json({ error: 'Failed to get team space' });

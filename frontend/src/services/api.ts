@@ -107,6 +107,13 @@ export const spacesApi = {
   getPart: (partId: string) => api.get(`/spaces/part/${partId}`),
   getGroup: (groupId: string) => api.get(`/spaces/group/${groupId}`),
   getTeam: () => api.get('/spaces/team'),
+  getBU: (buId: string) => api.get(`/spaces/bu/${buId}`),
+};
+
+// ==================== OrgWorkLog ====================
+export const orgWorkLogApi = {
+  getByGoal: (goalId: string) => api.get('/org-worklogs', { params: { goalId } }),
+  update: (id: string, data: { content: string }) => api.put(`/org-worklogs/${id}`, data),
 };
 
 // ==================== Reports ====================

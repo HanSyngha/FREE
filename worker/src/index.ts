@@ -684,6 +684,201 @@ async function callProgressLLM(
   };
 }
 
+// ========== OrgWorkLog Aggregation ==========
+async function generateOrgWorkLogs() {
+  const yesterday = getKSTTodayForDB();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const teams = await prisma.team.findMany({
+    include: {
+      businessUnit: true,
+      groups: { include: { parts: true } },
+    },
+  });
+
+  for (const team of teams) {
+    try {
+      // Phase A: Part OrgWorkLog — 개인 WorkLog → Part 요약
+      for (const group of team.groups) {
+        for (const part of group.parts) {
+          const partGoals = await prisma.item.findMany({
+            where: { level: 'PART', ownerId: part.id },
+          });
+          for (const goal of partGoals) {
+            try {
+              const workLogs = await prisma.workLog.findMany({
+                where: { linkedItemId: goal.id, date: yesterday },
+                include: { user: { select: { username: true } } },
+              });
+              if (workLogs.length === 0) continue;
+
+              const logsText = workLogs.map(w => `- ${w.user.username}: ${w.title} - ${w.content}`).join('\n');
+              const content = await callOrgWorkLogLLM(part.name, goal.title, logsText);
+
+              await prisma.orgWorkLog.upsert({
+                where: { level_ownerId_goalId_date: { level: 'PART', ownerId: part.id, goalId: goal.id, date: yesterday } },
+                update: { content },
+                create: { level: 'PART', ownerId: part.id, goalId: goal.id, date: yesterday, content },
+              });
+            } catch (e) {
+              console.error(`[OrgWorkLog] Part goal ${goal.id} failed:`, e);
+            }
+          }
+        }
+      }
+
+      // Phase B: Group OrgWorkLog — Part OrgWorkLog → Group 요약
+      for (const group of team.groups) {
+        const groupGoals = await prisma.item.findMany({
+          where: { level: 'GROUP', ownerId: group.id },
+          include: { childItems: { select: { id: true, ownerId: true } } },
+        });
+        for (const goal of groupGoals) {
+          try {
+            const childGoalIds = goal.childItems.map(c => c.id);
+            if (childGoalIds.length === 0) continue;
+
+            const partLogs = await prisma.orgWorkLog.findMany({
+              where: { level: 'PART', goalId: { in: childGoalIds }, date: yesterday },
+              include: { goal: { select: { title: true, ownerId: true } } },
+            });
+            if (partLogs.length === 0) continue;
+
+            // ownerId → part name 맵
+            const partIds = [...new Set(partLogs.map(l => l.goal.ownerId))];
+            const parts = await prisma.part.findMany({ where: { id: { in: partIds } }, select: { id: true, name: true } });
+            const partNameMap = new Map(parts.map(p => [p.id, p.name]));
+
+            const logsText = partLogs.map(l => `- ${partNameMap.get(l.goal.ownerId) || '파트'} (${l.goal.title}): ${l.content}`).join('\n');
+            const content = await callOrgWorkLogLLM(group.name, goal.title, logsText);
+
+            await prisma.orgWorkLog.upsert({
+              where: { level_ownerId_goalId_date: { level: 'GROUP', ownerId: group.id, goalId: goal.id, date: yesterday } },
+              update: { content },
+              create: { level: 'GROUP', ownerId: group.id, goalId: goal.id, date: yesterday, content },
+            });
+          } catch (e) {
+            console.error(`[OrgWorkLog] Group goal ${goal.id} failed:`, e);
+          }
+        }
+      }
+
+      // Phase C: Team OrgWorkLog — Group OrgWorkLog → Team 요약
+      const teamGoals = await prisma.item.findMany({
+        where: { level: 'TEAM', ownerId: team.id },
+        include: { childItems: { select: { id: true, ownerId: true } } },
+      });
+      for (const goal of teamGoals) {
+        try {
+          const childGoalIds = goal.childItems.map(c => c.id);
+          if (childGoalIds.length === 0) continue;
+
+          const groupLogs = await prisma.orgWorkLog.findMany({
+            where: { level: 'GROUP', goalId: { in: childGoalIds }, date: yesterday },
+            include: { goal: { select: { title: true, ownerId: true } } },
+          });
+          if (groupLogs.length === 0) continue;
+
+          const groupIds = [...new Set(groupLogs.map(l => l.goal.ownerId))];
+          const groups = await prisma.group.findMany({ where: { id: { in: groupIds } }, select: { id: true, name: true } });
+          const groupNameMap = new Map(groups.map(g => [g.id, g.name]));
+
+          const logsText = groupLogs.map(l => `- ${groupNameMap.get(l.goal.ownerId) || '그룹'} (${l.goal.title}): ${l.content}`).join('\n');
+          const content = await callOrgWorkLogLLM(team.name, goal.title, logsText);
+
+          await prisma.orgWorkLog.upsert({
+            where: { level_ownerId_goalId_date: { level: 'TEAM', ownerId: team.id, goalId: goal.id, date: yesterday } },
+            update: { content },
+            create: { level: 'TEAM', ownerId: team.id, goalId: goal.id, date: yesterday, content },
+          });
+        } catch (e) {
+          console.error(`[OrgWorkLog] Team goal ${goal.id} failed:`, e);
+        }
+      }
+
+      console.log(`[OrgWorkLog] Completed for team ${team.name}`);
+    } catch (e) {
+      console.error(`[OrgWorkLog] Team ${team.name} failed:`, e);
+    }
+  }
+
+  // Phase D: BU OrgWorkLog — Team OrgWorkLog → BU 요약
+  const bus = await prisma.businessUnit.findMany({ include: { teams: true } });
+  for (const bu of bus) {
+    const buGoals = await prisma.item.findMany({
+      where: { level: 'BU', ownerId: bu.id },
+      include: { childItems: { select: { id: true, ownerId: true } } },
+    });
+    for (const goal of buGoals) {
+      try {
+        const childGoalIds = goal.childItems.map(c => c.id);
+        if (childGoalIds.length === 0) continue;
+
+        const teamLogs = await prisma.orgWorkLog.findMany({
+          where: { level: 'TEAM', goalId: { in: childGoalIds }, date: yesterday },
+          include: { goal: { select: { title: true, ownerId: true } } },
+        });
+        if (teamLogs.length === 0) continue;
+
+        const teamIds = [...new Set(teamLogs.map(l => l.goal.ownerId))];
+        const buTeams = await prisma.team.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true } });
+        const teamNameMap = new Map(buTeams.map(t => [t.id, t.name]));
+
+        const logsText = teamLogs.map(l => `- ${teamNameMap.get(l.goal.ownerId) || '팀'} (${l.goal.title}): ${l.content}`).join('\n');
+        const content = await callOrgWorkLogLLM(bu.name, goal.title, logsText);
+
+        await prisma.orgWorkLog.upsert({
+          where: { level_ownerId_goalId_date: { level: 'BU', ownerId: bu.id, goalId: goal.id, date: yesterday } },
+          update: { content },
+          create: { level: 'BU', ownerId: bu.id, goalId: goal.id, date: yesterday, content },
+        });
+      } catch (e) {
+        console.error(`[OrgWorkLog] BU goal ${goal.id} failed:`, e);
+      }
+    }
+    if (buGoals.length > 0) console.log(`[OrgWorkLog] Completed for BU ${bu.name}`);
+  }
+
+  // BU 목표 진행률 업데이트
+  for (const bu of bus) {
+    const buGoals = await prisma.item.findMany({
+      where: { level: 'BU', ownerId: bu.id, status: { not: 'COMPLETED' } },
+    });
+    for (const item of buGoals) {
+      try {
+        const childItems = await prisma.item.findMany({
+          where: { parentItemId: item.id },
+          select: { title: true, progress: true, status: true },
+        });
+        if (childItems.length === 0) continue;
+
+        const childData = `## 하위 목표\n${childItems.map(c => `- [${c.status}, ${c.progress}%] ${c.title}`).join('\n')}`;
+        const result = await callProgressLLM(item, childData);
+        await prisma.item.update({
+          where: { id: item.id },
+          data: { progress: result.progress, summary: result.summary },
+        });
+      } catch (e) {
+        console.error(`[Progress] BU item ${item.id} failed:`, e);
+      }
+    }
+  }
+}
+
+async function callOrgWorkLogLLM(orgName: string, goalTitle: string, logsText: string): Promise<string> {
+  const systemPrompt = `당신은 조직 업무 요약 도우미입니다.
+
+"${orgName}"의 "${goalTitle}" 목표에 연결된 어제 업무 기록을 1-3문장으로 요약해 주세요.
+구체적 수치/결과를 포함하고, 핵심만 간결하게 작성하세요.
+
+반드시 요약 텍스트만 출력하세요. 다른 형식이나 태그는 포함하지 마세요.`;
+
+  return await callWithRetry([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: logsText },
+  ], 'ORG_WORKLOG_SUMMARY');
+}
+
 // ========== BullMQ Workers ==========
 const cleanupWorker = new Worker('cleanup', async () => {
   await cleanupExpiredData();
@@ -709,10 +904,20 @@ progressWorker.on('failed', (job, err) => {
   console.error(`[Progress] Job ${job?.id} failed:`, err.message);
 });
 
+// OrgWorkLog Worker
+const orgWorkLogWorker = new Worker('org-worklog', async () => {
+  await generateOrgWorkLogs();
+}, { connection, concurrency: 1 });
+
+orgWorkLogWorker.on('failed', (job, err) => {
+  console.error(`[OrgWorkLog] Job ${job?.id} failed:`, err.message);
+});
+
 // ========== Scheduled Jobs ==========
 const reportQueue = new Queue('report-generation', { connection });
 const cleanupQueue = new Queue('cleanup', { connection });
 const progressQueue = new Queue('progress-update', { connection });
+const orgWorkLogQueue = new Queue('org-worklog', { connection });
 
 async function setupScheduledJobs() {
   // 매일 0시 - 보고서 생성 (팀별 병렬)
@@ -740,6 +945,15 @@ async function setupScheduledJobs() {
   }, {
     name: 'daily-progress',
     data: { type: 'scheduled' },
+  });
+
+  // 매일 2시 - OrgWorkLog 합산 (진행률 업데이트 후)
+  await orgWorkLogQueue.upsertJobScheduler('daily-org-worklog', {
+    pattern: '0 2 * * *', // 매일 2시
+    tz: 'Asia/Seoul',
+  }, {
+    name: 'daily-org-worklog',
+    data: {},
   });
 
   console.log('[Worker] Scheduled jobs configured');
@@ -790,6 +1004,7 @@ process.on('SIGTERM', async () => {
   await reportWorker.close();
   await cleanupWorker.close();
   await progressWorker.close();
+  await orgWorkLogWorker.close();
   await prisma.$disconnect();
   process.exit(0);
 });

@@ -6,6 +6,10 @@ import { useState } from 'react';
 import { goalsApi, todosApi, workLogsApi } from '../../services/api';
 import ProgressBar from '../common/ProgressBar';
 
+const LEVEL_LABELS: Record<string, string> = {
+  BU: '사업부 목표', TEAM: '팀 목표', GROUP: '그룹 목표', PART: '파트 목표',
+};
+
 interface GoalCardProps {
   goal: {
     id: string;
@@ -16,10 +20,11 @@ interface GoalCardProps {
     startDate?: string | null;
     endDate?: string | null;
     summary?: string | null;
-    childItems?: Array<{ id: string; title: string; progress: number; status: string }>;
+    childItems?: Array<{ id: string; title: string; progress: number; status: string; ownerId?: string }>;
     parentItem?: { id: string; title: string; level?: string } | null;
-    linkedWorkLogs?: Array<{ id: string; title: string }>;
-    linkedTodos?: Array<{ id: string; title: string }>;
+    linkedWorkLogs?: Array<{ id: string; title: string; date?: string; user?: { id: string; username: string } }>;
+    linkedTodos?: Array<{ id: string; title: string; completed?: boolean; endDate?: string; user?: { id: string; username: string } }>;
+    orgWorkLogs?: Array<{ id: string; date: string; content: string; level: string }>;
     _count?: { linkedWorkLogs: number; linkedTodos: number };
   };
   canEdit?: boolean;
@@ -29,6 +34,8 @@ interface GoalCardProps {
   parentCandidates?: Array<{ id: string; title: string }>;
   /** 미매핑 하위 목표 목록 (하위 추가용) */
   unmappedChildren?: Array<{ id: string; title: string }>;
+  /** 하위 목표의 ownerId → 조직명 맵 */
+  childOrgNames?: Record<string, string>;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -39,9 +46,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const STATUS_OPTIONS = ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] as const;
 
-export default function GoalCard({ goal, canEdit = false, compact = false, onUpdate, parentCandidates, unmappedChildren }: GoalCardProps) {
+export default function GoalCard({ goal, canEdit = false, compact = false, onUpdate, parentCandidates, unmappedChildren, childOrgNames }: GoalCardProps) {
   const status = STATUS_LABELS[goal.status] || STATUS_LABELS.PLANNED;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [editingSummary, setEditingSummary] = useState(false);
   const [summaryValue, setSummaryValue] = useState(goal.summary || '');
   const [progressValue, setProgressValue] = useState(goal.progress);
@@ -119,7 +126,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, onUpd
       {/* 기본 정보 (항상 표시) */}
       <div className="p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         {goal.parentItem && (
-          <p className="text-xs text-gray-400 mb-1">상위: {goal.parentItem.title}</p>
+          <p className="text-xs text-gray-400 mb-1">
+            {goal.parentItem.level ? (LEVEL_LABELS[goal.parentItem.level] || '상위') : '상위'}: {goal.parentItem.title}
+          </p>
         )}
         <div className="flex items-start justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-900 flex-1">{goal.title}</h3>
@@ -258,7 +267,12 @@ export default function GoalCard({ goal, canEdit = false, compact = false, onUpd
               {goal.childItems?.map(child => (
                 <div key={child.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50">
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm text-gray-700 truncate block">{child.title}</span>
+                    <span className="text-sm text-gray-700 truncate block">
+                      {child.ownerId && childOrgNames?.[child.ownerId] && (
+                        <span className="text-primary-600 font-medium">{childOrgNames[child.ownerId]}: </span>
+                      )}
+                      {child.title}
+                    </span>
                     <div className="mt-0.5"><ProgressBar progress={child.progress} size="sm" /></div>
                   </div>
                   {canEdit && (
@@ -277,35 +291,83 @@ export default function GoalCard({ goal, canEdit = false, compact = false, onUpd
             </div>
           ) : null}
 
-          {/* 연결된 업무기록 */}
-          {goal.linkedWorkLogs && goal.linkedWorkLogs.length > 0 && (
+          {/* OrgWorkLog (조직 업무 기록 요약) */}
+          {goal.orgWorkLogs && goal.orgWorkLogs.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-gray-500 mb-1">연결된 업무기록 ({goal.linkedWorkLogs.length})</h4>
-              {goal.linkedWorkLogs.map(wl => (
-                <div key={wl.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-sm text-gray-600 truncate">{wl.title}</span>
-                  {canEdit && (
-                    <button onClick={() => handleUnlinkWorkLog(wl.id)}
-                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
-                  )}
+              <h4 className="text-xs font-semibold text-gray-500 mb-1">업무 요약 ({goal.orgWorkLogs.length}일)</h4>
+              {goal.orgWorkLogs.map(owl => (
+                <div key={owl.id} className="py-1.5 px-2 rounded hover:bg-gray-50">
+                  <span className="text-xs text-gray-400">{owl.date.split('T')[0]}</span>
+                  <p className="text-sm text-gray-600">{owl.content}</p>
                 </div>
               ))}
             </div>
           )}
 
-          {/* 연결된 할일 */}
+          {/* 연결된 업무기록 (파트원별 그룹핑) */}
+          {goal.linkedWorkLogs && goal.linkedWorkLogs.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-1">연결된 업무기록 ({goal.linkedWorkLogs.length})</h4>
+              {(() => {
+                const byUser: Record<string, typeof goal.linkedWorkLogs> = {};
+                for (const wl of goal.linkedWorkLogs!) {
+                  const name = wl.user?.username || '(미지정)';
+                  if (!byUser[name]) byUser[name] = [];
+                  byUser[name]!.push(wl);
+                }
+                return Object.entries(byUser).map(([name, wls]) => (
+                  <div key={name} className="mb-2">
+                    {Object.keys(byUser).length > 1 && (
+                      <p className="text-xs font-medium text-primary-600 px-2 mb-0.5">{name}</p>
+                    )}
+                    {wls!.map(wl => (
+                      <div key={wl.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
+                        <span className="text-sm text-gray-600 truncate">
+                          {wl.date && <span className="text-xs text-gray-400 mr-1">{wl.date.split('T')[0]}</span>}
+                          {wl.title}
+                        </span>
+                        {canEdit && (
+                          <button onClick={() => handleUnlinkWorkLog(wl.id)}
+                            className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+
+          {/* 연결된 할일 (파트원별 그룹핑) */}
           {goal.linkedTodos && goal.linkedTodos.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-gray-500 mb-1">연결된 할일 ({goal.linkedTodos.length})</h4>
-              {goal.linkedTodos.map(todo => (
-                <div key={todo.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
-                  <span className="text-sm text-gray-600 truncate">{todo.title}</span>
-                  {canEdit && (
-                    <button onClick={() => handleUnlinkTodo(todo.id)}
-                      className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
-                  )}
-                </div>
-              ))}
+              {(() => {
+                const byUser: Record<string, typeof goal.linkedTodos> = {};
+                for (const todo of goal.linkedTodos!) {
+                  const name = todo.user?.username || '(미지정)';
+                  if (!byUser[name]) byUser[name] = [];
+                  byUser[name]!.push(todo);
+                }
+                return Object.entries(byUser).map(([name, todos]) => (
+                  <div key={name} className="mb-2">
+                    {Object.keys(byUser).length > 1 && (
+                      <p className="text-xs font-medium text-primary-600 px-2 mb-0.5">{name}</p>
+                    )}
+                    {todos!.map(todo => (
+                      <div key={todo.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50">
+                        <span className={`text-sm truncate ${todo.completed ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
+                          {todo.title}
+                        </span>
+                        {canEdit && (
+                          <button onClick={() => handleUnlinkTodo(todo.id)}
+                            className="text-xs text-red-400 hover:text-red-600 ml-2 flex-shrink-0">해제</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
           )}
 

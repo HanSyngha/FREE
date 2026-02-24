@@ -111,9 +111,16 @@ export default function Layout() {
                 <div className="mb-3">
                   {/* 사업부 */}
                   {sidebarData.team.businessUnit && (
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase px-3 pt-2 pb-1">
-                      {sidebarData.team.businessUnit}
-                    </p>
+                    <NavLink
+                      to={`/space/bu/${sidebarData.team.businessUnit.id}`}
+                      className={({ isActive }) =>
+                        `block text-[10px] font-semibold uppercase px-3 pt-2 pb-1 rounded-lg transition-colors ${
+                          isActive ? 'text-primary-600 bg-primary-50' : 'text-gray-400 hover:text-primary-500'
+                        }`
+                      }
+                    >
+                      {sidebarData.team.businessUnit.name}
+                    </NavLink>
                   )}
                   {/* 팀 */}
                   <NavLink to="/space/team" className={({ isActive }) =>

@@ -17,6 +17,7 @@ import { teamAdminRoutes } from './routes/teamAdmin.routes.js';
 import { ratingRoutes } from './routes/rating.routes.js';
 import { profileRoutes } from './routes/profile.routes.js';
 import { announcementRoutes } from './routes/announcement.routes.js';
+import { orgWorkLogRoutes } from './routes/orgWorkLog.routes.js';
 
 export const prisma = new PrismaClient();
 export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
@@ -52,6 +53,7 @@ app.use('/team-admin', teamAdminRoutes);
 app.use('/ratings', ratingRoutes);
 app.use('/profile', profileRoutes);
 app.use('/announcements', announcementRoutes);
+app.use('/org-worklogs', orgWorkLogRoutes);
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {

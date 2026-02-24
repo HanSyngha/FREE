@@ -282,7 +282,7 @@ export function requireOrgAdmin(level: string, targetIdParam: string) {
       where: { userId: user.id },
     });
 
-    const levelHierarchy: Record<string, number> = { TEAM: 3, GROUP: 2, PART: 1 };
+    const levelHierarchy: Record<string, number> = { BU: 4, TEAM: 3, GROUP: 2, PART: 1 };
     const requiredLevel = levelHierarchy[level] || 0;
 
     const hasAccess = orgAdmins.some(oa => {
