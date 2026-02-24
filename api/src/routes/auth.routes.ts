@@ -29,6 +29,11 @@ authRoutes.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) 
 
     await prisma.user.update({ where: { id: user.id }, data: { lastActive: new Date() } });
 
+    const orgAdmins = await prisma.orgAdmin.findMany({
+      where: { userId: user.id },
+      select: { level: true, targetId: true },
+    });
+
     const personalSpace = await prisma.space.findFirst({
       where: { type: 'PERSONAL', ownerId: user.id },
     });
@@ -63,6 +68,7 @@ authRoutes.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) 
       },
       isSuperAdmin: superAdmin,
       isTeamAdmin: user.teamAdmins.length > 0,
+      orgAdminLevels: orgAdmins,
       needsOnboarding: !user.groupId || !user.partId,
     });
   } catch (error) {

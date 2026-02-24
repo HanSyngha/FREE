@@ -4,8 +4,22 @@ import { authApi } from '../../services/api';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { spacesApi } from '../../services/api';
 
+function getAdminLabel(isSuperAdmin: boolean, isTeamAdmin: boolean, orgAdminLevels: Array<{ level: string }>) {
+  if (isSuperAdmin) return '사업부 관리';
+  if (isTeamAdmin) return '팀 관리';
+  const highest = orgAdminLevels.reduce<string | null>((h, oa) => {
+    const order: Record<string, number> = { TEAM: 3, GROUP: 2, PART: 1 };
+    if (!h || (order[oa.level] || 0) > (order[h] || 0)) return oa.level;
+    return h;
+  }, null);
+  if (highest === 'TEAM') return '팀 관리';
+  if (highest === 'GROUP') return '그룹 관리';
+  if (highest === 'PART') return '파트 관리';
+  return '관리';
+}
+
 export default function Layout() {
-  const { user, isSuperAdmin, isTeamAdmin, logout } = useAuthStore();
+  const { user, isSuperAdmin, isTeamAdmin, orgAdminLevels, logout } = useAuthStore();
   const navigate = useNavigate();
   const [sidebarData, setSidebarData] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -194,14 +208,12 @@ export default function Layout() {
               )}
 
               {/* Admin 메뉴 */}
-              {(isSuperAdmin || isTeamAdmin) && (
+              {(isSuperAdmin || isTeamAdmin || orgAdminLevels.length > 0) && (
                 <div className="mt-6 pt-4 border-t border-gray-200">
                   <p className="text-xs font-semibold text-gray-400 uppercase mb-2 px-3">관리</p>
-                  {(isTeamAdmin || isSuperAdmin) && (
-                    <NavLink to="/admin/team" className={navLinkClass}>
-                      팀 관리
-                    </NavLink>
-                  )}
+                  <NavLink to="/admin/org" className={navLinkClass}>
+                    {getAdminLabel(isSuperAdmin, isTeamAdmin, orgAdminLevels)}
+                  </NavLink>
                   {isSuperAdmin && (
                     <NavLink to="/admin/super" className={navLinkClass}>
                       시스템 관리

@@ -4,10 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, reportsApi, goalsApi } from '../services/api';
+import { spacesApi, reportsApi, goalsApi, orgApi } from '../services/api';
 import GoalCard from '../components/goal/GoalCard';
 import GoalInputForm from '../components/goal/GoalInputForm';
 import ProgressBar from '../components/common/ProgressBar';
+import OrgChart from '../components/common/OrgChart';
+import type { OrgNode } from '../components/common/OrgChart';
 import DashboardGrid from '../components/spaces/DashboardGrid';
 import DashboardSection from '../components/spaces/DashboardSection';
 
@@ -26,6 +28,7 @@ export default function GroupSpace() {
   const [goals, setGoals] = useState<any[]>([]);
   const [partGoals, setPartGoals] = useState<Record<string, any[]>>({});
   const [teamGoals, setTeamGoals] = useState<Array<{ id: string; title: string }>>([]);
+  const [orgTree, setOrgTree] = useState<OrgNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOlderReports, setShowOlderReports] = useState(false);
   const [showAllGoals, setShowAllGoals] = useState(false);
@@ -52,6 +55,12 @@ export default function GroupSpace() {
           const teamRes = await goalsApi.getAll({ level: 'TEAM', ownerId: teamId });
           setTeamGoals((teamRes.data.goals || []).map((g: any) => ({ id: g.id, title: g.title })));
         } catch { setTeamGoals([]); }
+      }
+
+      // 조직도
+      const teamId = spaceRes.data.group?.teamId;
+      if (teamId) {
+        try { const treeRes = await orgApi.getTree(teamId); setOrgTree(treeRes.data.tree); } catch {}
       }
 
       const parts = spaceRes.data.parts || [];
@@ -116,9 +125,16 @@ export default function GroupSpace() {
 
       <DashboardGrid
         top={
-          isGroupAdmin && groupId ? (
-            <GoalInputForm level="GROUP" ownerId={groupId} onCreated={fetchData} />
-          ) : undefined
+          <>
+            {orgTree && (
+              <DashboardSection title="조직도" colorBar="blue">
+                <OrgChart root={orgTree} currentId={groupId} />
+              </DashboardSection>
+            )}
+            {isGroupAdmin && groupId && (
+              <GoalInputForm level="GROUP" ownerId={groupId} onCreated={fetchData} />
+            )}
+          </>
         }
         left={
           <>
