@@ -1,15 +1,15 @@
 /**
- * Goal Routes - 조직 목표 CRUD + LLM 입력
+ * Goal Routes - 조직 목표 CRUD + LLM 입력 + 자동 매핑
  */
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { authenticateToken, AuthenticatedRequest, loadUser, requireTeamAdminOrHigher } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest, loadUser, requireGoalEdit } from '../middleware/auth.js';
 import { llmLimit } from '../middleware/rateLimit.js';
-import { parseGoalsWithLLM } from '../services/llm.service.js';
+import { parseGoalsWithLLM, autoMapNewGoal, autoMapTodosAndWorkLogs } from '../services/llm.service.js';
 
 export const goalRoutes = Router();
 
-// POST /goals - 조직장 Item 입력 (LLM 분리+태그+매핑)
+// POST /goals - 조직장 Item 입력 (LLM 분리+매핑)
 goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.dbUser!;
@@ -19,20 +19,12 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
     if (!level || !['TEAM', 'GROUP', 'PART'].includes(level)) { res.status(400).json({ error: 'level은 TEAM/GROUP/PART 중 하나여야 합니다.' }); return; }
     if (!ownerId) { res.status(400).json({ error: 'ownerId는 필수입니다.' }); return; }
 
-    // 권한 체크: 해당 레벨의 조직장 or SuperAdmin/TeamAdmin
-    // 간소화: loadUser 후 팀 소속 확인
     if (!user.teamId) { res.status(400).json({ error: '팀이 배정되지 않았습니다.' }); return; }
 
     // 기존 상위/하위 Item 리스트 조회
     const existingItems = await prisma.item.findMany({
       where: { level, ownerId },
       select: { id: true, title: true, status: true },
-    });
-
-    // 기존 태그 목록
-    const existingTags = await prisma.tag.findMany({
-      where: { teamId: user.teamId },
-      select: { id: true, name: true },
     });
 
     // 상위 레벨 Item 목록 (매핑용)
@@ -60,24 +52,12 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
     const parsedGoals = await parseGoalsWithLLM(text, {
       level,
       existingItems: existingItems.map(i => ({ id: i.id, title: i.title })),
-      existingTags: existingTags.map(t => t.name),
       parentItems,
     }, userInfo);
 
     // 목표 생성
     const createdGoals = [];
     for (const goal of parsedGoals) {
-      // Tag upsert
-      const tagIds: string[] = [];
-      for (const tagName of (goal.tags || [])) {
-        const tag = await prisma.tag.upsert({
-          where: { name_teamId: { name: tagName, teamId: user.teamId } },
-          update: {},
-          create: { name: tagName, teamId: user.teamId },
-        });
-        tagIds.push(tag.id);
-      }
-
       // parentItemId 매핑
       let parentItemId: string | null = null;
       if (goal.parentTitle && parentItems.length > 0) {
@@ -95,11 +75,11 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
           level: level as any,
           ownerId,
           parentItemId,
-          itemTags: {
-            create: tagIds.map(tagId => ({ tagId })),
-          },
         },
-        include: { itemTags: { include: { tag: true } } },
+        include: {
+          childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+          parentItem: { select: { id: true, title: true, level: true } },
+        },
       });
 
       createdGoals.push(created);
@@ -107,6 +87,11 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
       await prisma.activityLog.create({
         data: { userId: user.id, action: 'CREATE_GOAL', targetType: 'GOAL', targetId: created.id, details: created.title },
       });
+
+      // 자동 하위 매핑 (비동기, 에러 무시)
+      autoMapChildItems(created, level, userInfo).catch(e =>
+        console.error('[AutoMap] Error:', e.message)
+      );
     }
 
     res.json({ success: true, goals: createdGoals });
@@ -116,23 +101,105 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
   }
 });
 
-// GET /goals - 목표 목록 (level, ownerId, tag 필터)
+/** 새로 생성된 목표에 대해 미매핑 하위 Item 자동 연결 */
+async function autoMapChildItems(
+  created: { id: string; title: string; content: string },
+  level: string,
+  userInfo: { loginid: string; username: string; deptname: string }
+) {
+  let childLevel: string | null = null;
+  let childOwnerIds: string[] = [];
+
+  if (level === 'TEAM') {
+    childLevel = 'GROUP';
+    // 해당 팀의 모든 그룹
+    const item = await prisma.item.findUnique({ where: { id: created.id } });
+    if (!item) return;
+    const groups = await prisma.group.findMany({ where: { teamId: item.ownerId }, select: { id: true } });
+    childOwnerIds = groups.map(g => g.id);
+  } else if (level === 'GROUP') {
+    childLevel = 'PART';
+    const item = await prisma.item.findUnique({ where: { id: created.id } });
+    if (!item) return;
+    const parts = await prisma.part.findMany({ where: { groupId: item.ownerId }, select: { id: true } });
+    childOwnerIds = parts.map(p => p.id);
+  } else if (level === 'PART') {
+    // PART 목표 → 미매핑 Todo/WorkLog 연결
+    const item = await prisma.item.findUnique({ where: { id: created.id } });
+    if (!item) return;
+    const partUsers = await prisma.user.findMany({ where: { partId: item.ownerId }, select: { id: true } });
+    const userIds = partUsers.map(u => u.id);
+
+    const unmappedTodos = await prisma.todo.findMany({
+      where: { userId: { in: userIds }, linkedItemId: null, completed: false },
+      select: { id: true, title: true },
+      take: 50,
+    });
+    const unmappedWorkLogs = await prisma.workLog.findMany({
+      where: { userId: { in: userIds }, linkedItemId: null },
+      select: { id: true, title: true },
+      orderBy: { date: 'desc' },
+      take: 50,
+    });
+
+    if (unmappedTodos.length === 0 && unmappedWorkLogs.length === 0) return;
+
+    const result = await autoMapTodosAndWorkLogs(
+      { id: created.id, title: created.title, content: created.content },
+      unmappedTodos, unmappedWorkLogs, userInfo
+    );
+
+    if (result.todoIds.length > 0) {
+      await prisma.todo.updateMany({
+        where: { id: { in: result.todoIds } },
+        data: { linkedItemId: created.id },
+      });
+    }
+    if (result.workLogIds.length > 0) {
+      await prisma.workLog.updateMany({
+        where: { id: { in: result.workLogIds } },
+        data: { linkedItemId: created.id },
+      });
+    }
+    return;
+  }
+
+  if (!childLevel || childOwnerIds.length === 0) return;
+
+  const unmappedChildren = await prisma.item.findMany({
+    where: { level: childLevel as any, ownerId: { in: childOwnerIds }, parentItemId: null },
+    select: { id: true, title: true },
+    take: 50,
+  });
+
+  if (unmappedChildren.length === 0) return;
+
+  const result = await autoMapNewGoal(
+    { id: created.id, title: created.title, content: created.content, level },
+    unmappedChildren, userInfo
+  );
+
+  if (result.childItemIds.length > 0) {
+    await prisma.item.updateMany({
+      where: { id: { in: result.childItemIds } },
+      data: { parentItemId: created.id },
+    });
+  }
+}
+
+// GET /goals - 목표 목록 (level, ownerId, status 필터)
 goalRoutes.get('/', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { level, ownerId, tag, status } = req.query;
+    const { level, ownerId, status } = req.query;
 
     const where: any = {};
     if (level) where.level = level;
     if (ownerId) where.ownerId = ownerId;
     if (status) where.status = status;
-    if (tag) {
-      where.itemTags = { some: { tag: { name: tag as string } } };
-    }
 
     const goals = await prisma.item.findMany({
       where,
       include: {
-        itemTags: { include: { tag: true } },
         childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
         parentItem: { select: { id: true, title: true, level: true } },
         _count: { select: { linkedWorkLogs: true, linkedTodos: true } },
@@ -147,91 +214,6 @@ goalRoutes.get('/', authenticateToken, loadUser, async (req: AuthenticatedReques
   }
 });
 
-// GET /goals/tags - 팀 내 태그 목록
-goalRoutes.get('/tags', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const user = req.dbUser!;
-    if (!user.teamId) { res.status(400).json({ error: 'Team not assigned' }); return; }
-
-    const tags = await prisma.tag.findMany({
-      where: { teamId: user.teamId },
-      include: { _count: { select: { itemTags: true } } },
-      orderBy: { name: 'asc' },
-    });
-
-    res.json({ tags });
-  } catch (error) {
-    console.error('Get tags error:', error);
-    res.status(500).json({ error: 'Failed to get tags' });
-  }
-});
-
-// GET /goals/dashboard - 대시보드 (태그별 진행률, Gantt 데이터)
-goalRoutes.get('/dashboard', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const user = req.dbUser!;
-    if (!user.teamId) { res.status(400).json({ error: 'Team not assigned' }); return; }
-
-    // 팀 내 모든 목표
-    const allGoals = await prisma.item.findMany({
-      where: {
-        OR: [
-          { level: 'TEAM', ownerId: user.teamId },
-          { level: 'GROUP', ownerId: { in: (await prisma.group.findMany({ where: { teamId: user.teamId }, select: { id: true } })).map(g => g.id) } },
-          { level: 'PART', ownerId: { in: (await prisma.part.findMany({ where: { group: { teamId: user.teamId } }, select: { id: true } })).map(p => p.id) } },
-        ],
-      },
-      include: {
-        itemTags: { include: { tag: true } },
-        parentItem: { select: { id: true, title: true, level: true } },
-      },
-    });
-
-    // 태그별 진행률 집계
-    const tagMap = new Map<string, { name: string; goals: typeof allGoals; avgProgress: number }>();
-    for (const goal of allGoals) {
-      for (const it of goal.itemTags) {
-        if (!tagMap.has(it.tag.name)) {
-          tagMap.set(it.tag.name, { name: it.tag.name, goals: [], avgProgress: 0 });
-        }
-        tagMap.get(it.tag.name)!.goals.push(goal);
-      }
-    }
-    for (const [, data] of tagMap) {
-      data.avgProgress = data.goals.length > 0
-        ? Math.round(data.goals.reduce((sum, g) => sum + g.progress, 0) / data.goals.length)
-        : 0;
-    }
-
-    const tagProgress = Array.from(tagMap.values()).map(({ name, goals, avgProgress }) => ({
-      tag: name,
-      count: goals.length,
-      avgProgress,
-      completed: goals.filter(g => g.status === 'COMPLETED').length,
-    }));
-
-    // Gantt 데이터
-    const ganttData = allGoals
-      .filter(g => g.startDate || g.endDate)
-      .map(g => ({
-        id: g.id,
-        title: g.title,
-        level: g.level,
-        status: g.status,
-        progress: g.progress,
-        startDate: g.startDate,
-        endDate: g.endDate,
-        tags: g.itemTags.map(it => it.tag.name),
-        parentItem: g.parentItem || null,
-      }));
-
-    res.json({ tagProgress, ganttData, totalGoals: allGoals.length });
-  } catch (error) {
-    console.error('Get dashboard error:', error);
-    res.status(500).json({ error: 'Failed to get dashboard' });
-  }
-});
-
 // GET /goals/:id - 목표 상세
 goalRoutes.get('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
   try {
@@ -239,10 +221,9 @@ goalRoutes.get('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
     const goal = await prisma.item.findUnique({
       where: { id },
       include: {
-        itemTags: { include: { tag: true } },
         childItems: {
-          include: { itemTags: { include: { tag: true } } },
           orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
+          select: { id: true, title: true, progress: true, status: true, level: true, ownerId: true },
         },
         parentItem: { select: { id: true, title: true, level: true } },
         linkedWorkLogs: {
@@ -265,11 +246,11 @@ goalRoutes.get('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
   }
 });
 
-// PUT /goals/:id - 목표 수정 (LLM 안 탐)
-goalRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+// PUT /goals/:id - 목표 수정
+goalRoutes.put('/:id', authenticateToken, loadUser, requireGoalEdit(), async (req: AuthenticatedRequest, res) => {
   try {
     const id = req.params.id as string;
-    const { title, content, status, startDate, endDate, progress, summary, tags } = req.body;
+    const { title, content, status, startDate, endDate, progress, summary } = req.body;
 
     const goal = await prisma.item.findUnique({ where: { id } });
     if (!goal) { res.status(404).json({ error: 'Goal not found' }); return; }
@@ -285,27 +266,21 @@ goalRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
 
     const updated = await prisma.item.update({ where: { id }, data: updateData });
 
-    // 태그 업데이트
-    if (tags !== undefined && Array.isArray(tags)) {
-      const user = req.dbUser!;
-      if (user.teamId) {
-        // 기존 태그 삭제
-        await prisma.itemTag.deleteMany({ where: { itemId: id } });
-        // 새 태그 연결
-        for (const tagName of tags) {
-          const tag = await prisma.tag.upsert({
-            where: { name_teamId: { name: tagName, teamId: user.teamId } },
-            update: {},
-            create: { name: tagName, teamId: user.teamId },
-          });
-          await prisma.itemTag.create({ data: { itemId: id, tagId: tag.id } });
-        }
-      }
+    // title/content 변경 시 자동 재매핑 트리거 (비동기)
+    if (updateData.title || updateData.content) {
+      const userInfo = { loginid: req.dbUser!.loginid, username: req.dbUser!.username, deptname: req.dbUser!.deptname };
+      autoMapChildItems(
+        { id: updated.id, title: updated.title, content: updated.content },
+        updated.level, userInfo
+      ).catch(e => console.error('[AutoMap] Re-map error:', e.message));
     }
 
     const result = await prisma.item.findUnique({
       where: { id },
-      include: { itemTags: { include: { tag: true } } },
+      include: {
+        childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+        parentItem: { select: { id: true, title: true, level: true } },
+      },
     });
 
     res.json({ success: true, goal: result });
@@ -316,7 +291,7 @@ goalRoutes.put('/:id', authenticateToken, loadUser, async (req: AuthenticatedReq
 });
 
 // PUT /goals/:id/mapping - 매핑 수정
-goalRoutes.put('/:id/mapping', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+goalRoutes.put('/:id/mapping', authenticateToken, loadUser, requireGoalEdit(), async (req: AuthenticatedRequest, res) => {
   try {
     const id = req.params.id as string;
     const { parentItemId, childItemIds } = req.body;
@@ -359,7 +334,7 @@ goalRoutes.put('/:id/mapping', authenticateToken, loadUser, async (req: Authenti
 });
 
 // DELETE /goals/:id - 목표 삭제
-goalRoutes.delete('/:id', authenticateToken, loadUser, async (req: AuthenticatedRequest, res) => {
+goalRoutes.delete('/:id', authenticateToken, loadUser, requireGoalEdit(), async (req: AuthenticatedRequest, res) => {
   try {
     const id = req.params.id as string;
     const user = req.dbUser!;
@@ -372,8 +347,6 @@ goalRoutes.delete('/:id', authenticateToken, loadUser, async (req: Authenticated
     // linkedWorkLog/Todo 연결 해제
     await prisma.workLog.updateMany({ where: { linkedItemId: id }, data: { linkedItemId: null } });
     await prisma.todo.updateMany({ where: { linkedItemId: id }, data: { linkedItemId: null } });
-    // ItemTag 삭제
-    await prisma.itemTag.deleteMany({ where: { itemId: id } });
     // 목표 삭제
     await prisma.item.delete({ where: { id } });
 

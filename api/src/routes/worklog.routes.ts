@@ -251,7 +251,7 @@ worklogRoutes.put('/:id', authenticateToken, loadUser, async (req: Authenticated
     if (!worklog) { res.status(404).json({ error: 'WorkLog not found' }); return; }
     if (worklog.userId !== user.id) { res.status(403).json({ error: '본인의 업무 기록만 수정할 수 있습니다.' }); return; }
 
-    const { title, content, link, date } = req.body;
+    const { title, content, link, date, linkedItemId } = req.body;
     const updateData: any = {};
     if (title !== undefined) updateData.title = String(title).slice(0, 500);
     if (content !== undefined) updateData.content = String(content).slice(0, 10000);
@@ -280,6 +280,9 @@ worklogRoutes.put('/:id', authenticateToken, loadUser, async (req: Authenticated
       minDate.setDate(minDate.getDate() - 29);
       if (newDate > todayMidnight || newDate < minDate) { res.status(400).json({ error: '유효하지 않은 날짜입니다.' }); return; }
       updateData.date = newDate;
+    }
+    if (linkedItemId !== undefined) {
+      updateData.linkedItemId = linkedItemId || null;
     }
 
     const updated = await prisma.workLog.update({ where: { id }, data: updateData });

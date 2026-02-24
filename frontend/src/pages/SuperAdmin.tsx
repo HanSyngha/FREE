@@ -1,16 +1,25 @@
 /**
- * Super Admin Page - LLM 관리, 팀 관리, Team Admin 지정
+ * Super Admin Page - LLM 관리, 팀 관리, Team Admin 지정, LLM 작업별 모델, 보고서/진행률 트리거
  */
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { adminApi, orgAdminApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
+const OPERATION_LABELS: Record<string, string> = {
+  PARSE_GOALS: '조직 목표 분리',
+  PARSE_TEXT: '개인 텍스트 → WorkLog+Todo',
+  LINK_TODO: 'Todo → 목표 연결',
+  AUTO_MAP: '생성/수정 시 양방향 매핑',
+  UPDATE_PROGRESS: '진행률 자동 업데이트',
+  REPORT: '보고서 생성',
+};
+
 export default function SuperAdmin() {
   const { isSuperAdmin } = useAuthStore();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'llm' | 'teams' | 'reports' | 'orgadmin'>('llm');
+  const [tab, setTab] = useState<'llm' | 'teams' | 'reports' | 'orgadmin' | 'llmops'>('llm');
 
   // LLM State
   const [endpoint, setEndpoint] = useState('');
@@ -24,6 +33,8 @@ export default function SuperAdmin() {
   const [reportTeamId, setReportTeamId] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [triggeringAll, setTriggeringAll] = useState<'report' | 'progress' | null>(null);
+  const [triggerAllResult, setTriggerAllResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // OrgAdmin State
   const [orgAdmins, setOrgAdmins] = useState<any[]>([]);
@@ -36,6 +47,11 @@ export default function SuperAdmin() {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [selectedPartId, setSelectedPartId] = useState('');
   const [adminUserId, setAdminUserId] = useState('');
+
+  // LLM Operations State
+  const [llmOps, setLlmOps] = useState<any[]>([]);
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [opTypes, setOpTypes] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isSuperAdmin) { navigate('/'); return; }
@@ -52,6 +68,14 @@ export default function SuperAdmin() {
 
   const fetchTeams = () => {
     adminApi.getTeams().then(res => setTeams(res.data.teams)).catch(() => {});
+  };
+
+  const fetchLLMOps = () => {
+    adminApi.getLLMOperations().then(res => {
+      setLlmOps(res.data.configs || []);
+      setAvailableModels(res.data.availableModels || []);
+      setOpTypes(res.data.operationTypes || []);
+    }).catch(() => {});
   };
 
   const handleSetEndpoint = async () => {
@@ -120,6 +144,22 @@ export default function SuperAdmin() {
     }
   };
 
+  const handleTriggerAll = async (type: 'report' | 'progress') => {
+    if (!confirm(`전체 팀의 ${type === 'report' ? '보고서 생성' : '진행률 업데이트'}을 시작하시겠습니까?`)) return;
+    setTriggeringAll(type);
+    setTriggerAllResult(null);
+    try {
+      const res = type === 'report'
+        ? await adminApi.triggerReport()
+        : await adminApi.triggerProgress();
+      setTriggerAllResult({ type: 'success', message: res.data.message });
+    } catch (err: any) {
+      setTriggerAllResult({ type: 'error', message: err.response?.data?.error || '트리거에 실패했습니다.' });
+    } finally {
+      setTriggeringAll(null);
+    }
+  };
+
   const fetchOrgAdmins = () => {
     orgAdminApi.getAll().then(res => setOrgAdmins(res.data.orgAdmins || [])).catch(() => {});
   };
@@ -142,6 +182,20 @@ export default function SuperAdmin() {
     } catch { alert('권한 해제에 실패했습니다.'); }
   };
 
+  const handleSetLLMOperation = async (operation: string, modelId: string) => {
+    try {
+      await adminApi.setLLMOperation(operation, modelId);
+      fetchLLMOps();
+    } catch { alert('모델 설정에 실패했습니다.'); }
+  };
+
+  const handleDeleteLLMOperation = async (operation: string) => {
+    try {
+      await adminApi.deleteLLMOperation(operation);
+      fetchLLMOps();
+    } catch { alert('설정 삭제에 실패했습니다.'); }
+  };
+
   const businessUnits = [...new Set(teams.map(t => t.businessUnit).filter(Boolean))].sort();
   const filteredTeams = filterBU ? teams.filter(t => t.businessUnit === filterBU) : teams;
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -151,29 +205,26 @@ export default function SuperAdmin() {
       <h1 className="text-xl font-bold text-gray-900 mb-6">시스템 관리 (Super Admin)</h1>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6" role="tablist" aria-label="관리 메뉴">
-        <button onClick={() => setTab('llm')} role="tab" aria-selected={tab === 'llm'} aria-controls="panel-llm"
-          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'llm' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          LLM 설정
-        </button>
-        <button onClick={() => setTab('teams')} role="tab" aria-selected={tab === 'teams'} aria-controls="panel-teams"
-          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'teams' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          팀 관리
-        </button>
-        <button onClick={() => setTab('reports')} role="tab" aria-selected={tab === 'reports'} aria-controls="panel-reports"
-          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'reports' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          보고서 생성
-        </button>
-        <button onClick={() => { setTab('orgadmin'); if (orgAdmins.length === 0) fetchOrgAdmins(); }} role="tab" aria-selected={tab === 'orgadmin'} aria-controls="panel-orgadmin"
-          className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === 'orgadmin' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          조직 권한
-        </button>
+      <div className="flex gap-2 mb-6 flex-wrap" role="tablist" aria-label="관리 메뉴">
+        {([
+          ['llm', 'LLM 설정'],
+          ['llmops', 'LLM 작업별 모델'],
+          ['teams', '팀 관리'],
+          ['reports', '보고서/진행률'],
+          ['orgadmin', '조직 권한'],
+        ] as const).map(([key, label]) => (
+          <button key={key}
+            onClick={() => { setTab(key); if (key === 'orgadmin' && orgAdmins.length === 0) fetchOrgAdmins(); if (key === 'llmops' && llmOps.length === 0) fetchLLMOps(); }}
+            role="tab" aria-selected={tab === key}
+            className={`px-4 py-2 text-sm rounded-lg transition-colors ${tab === key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* LLM Tab */}
       {tab === 'llm' && (
-        <div id="panel-llm" role="tabpanel" aria-labelledby="tab-llm" className="space-y-6">
-          {/* Endpoint 설정 */}
+        <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-bold text-gray-700 mb-4">LLM Endpoint 설정</h2>
             <div className="space-y-3">
@@ -200,7 +251,6 @@ export default function SuperAdmin() {
             </div>
           </div>
 
-          {/* Model List */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-bold text-gray-700 mb-4">사용 가능한 모델</h2>
             {models.length === 0 ? (
@@ -232,10 +282,46 @@ export default function SuperAdmin() {
         </div>
       )}
 
+      {/* LLM Operations Tab */}
+      {tab === 'llmops' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-sm font-bold text-gray-700 mb-4">LLM 작업별 모델 설정</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              각 LLM 작업에 사용할 모델을 개별 지정할 수 있습니다. 미설정 시 기본 활성 모델이 사용됩니다.
+            </p>
+            <div className="space-y-3">
+              {opTypes.map(op => {
+                const config = llmOps.find((c: any) => c.operation === op);
+                return (
+                  <div key={op} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-gray-700">{OPERATION_LABELS[op] || op}</span>
+                      <span className="text-xs text-gray-400 ml-2 font-mono">{op}</span>
+                    </div>
+                    <select
+                      value={config?.modelId || ''}
+                      onChange={e => {
+                        if (e.target.value) handleSetLLMOperation(op, e.target.value);
+                        else handleDeleteLLMOperation(op);
+                      }}
+                      className="px-2 py-1 text-xs border rounded-lg min-w-[200px]">
+                      <option value="">기본 모델 사용</option>
+                      {availableModels.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.displayName || m.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Teams Tab */}
       {tab === 'teams' && (
-        <div id="panel-teams" role="tabpanel" aria-labelledby="tab-teams" className="space-y-6">
-          {/* 팀 목록 */}
+        <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-gray-700">전체 팀 목록</h2>
@@ -257,7 +343,6 @@ export default function SuperAdmin() {
                     </div>
                     <span className="text-xs text-gray-500">{team.users?.length || 0}명</span>
                   </div>
-                  {/* Team Admins */}
                   {team.teamAdmins?.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {team.teamAdmins.map((ta: any) => (
@@ -274,14 +359,12 @@ export default function SuperAdmin() {
             </div>
           </div>
 
-          {/* Team Admin 추가 */}
           {selectedTeam && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-bold text-gray-700 mb-4">
                 {selectedTeam.name} <span className="text-gray-400 font-normal">({selectedTeam.businessUnit})</span> - Team Admin 관리
               </h2>
 
-              {/* 그룹/파트 드롭다운 필터 */}
               <div className="flex gap-3 mb-4">
                 <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedPartId(''); }}
                   className="px-3 py-2 border rounded-lg text-sm">
@@ -297,7 +380,6 @@ export default function SuperAdmin() {
                 </select>
               </div>
 
-              {/* 사용자 목록 */}
               <div className="mb-4 max-h-48 overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="text-left text-xs text-gray-500 border-b">
@@ -336,12 +418,33 @@ export default function SuperAdmin() {
 
       {/* Reports Tab */}
       {tab === 'reports' && (
-        <div id="panel-reports" role="tabpanel" aria-labelledby="tab-reports" className="space-y-6">
+        <div className="space-y-6">
+          {/* 전체 트리거 */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-sm font-bold text-gray-700 mb-2">수동 보고서 생성</h2>
+            <h2 className="text-sm font-bold text-gray-700 mb-2">전체 팀 일괄 트리거</h2>
+            <p className="text-xs text-gray-500 mb-4">모든 팀에 대해 보고서 생성 또는 진행률 업데이트를 일괄 실행합니다.</p>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => handleTriggerAll('report')} disabled={triggeringAll !== null}
+                className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700">
+                {triggeringAll === 'report' ? '생성 중...' : '전체 팀 보고서 생성'}
+              </button>
+              <button onClick={() => handleTriggerAll('progress')} disabled={triggeringAll !== null}
+                className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-gray-700">
+                {triggeringAll === 'progress' ? '업데이트 중...' : '전체 팀 진행률 업데이트'}
+              </button>
+            </div>
+            {triggerAllResult && (
+              <div className={`mt-2 p-3 rounded-lg text-sm ${
+                triggerAllResult.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+              }`}>{triggerAllResult.message}</div>
+            )}
+          </div>
+
+          {/* 개별 팀 보고서 생성 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-sm font-bold text-gray-700 mb-2">개별 팀 보고서 생성</h2>
             <p className="text-xs text-gray-500 mb-4">
-              매일 00:00(KST)에 자동 실행되는 보고서 생성과 동일한 작업을 수동으로 트리거합니다.
-              파트 → 그룹 → 팀 순서로 보고서가 생성됩니다.
+              특정 팀의 보고서를 수동으로 생성합니다. 파트 → 그룹 → 팀 순서로 생성됩니다.
             </p>
 
             <div className="space-y-4">
@@ -385,16 +488,16 @@ export default function SuperAdmin() {
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <p className="text-xs text-amber-700">
-              <strong>참고:</strong> 보고서 생성은 Worker 프로세스에서 비동기로 처리됩니다.
-              생성 완료까지 팀 규모에 따라 시간이 걸릴 수 있으며, 진행 상황은 Worker 로그에서 확인할 수 있습니다.
+              <strong>참고:</strong> 보고서 생성과 진행률 업데이트는 Worker 프로세스에서 비동기로 처리됩니다.
+              완료까지 팀 규모에 따라 시간이 걸릴 수 있으며, 진행 상황은 Worker 로그에서 확인할 수 있습니다.
             </p>
           </div>
         </div>
       )}
+
       {/* OrgAdmin Tab */}
       {tab === 'orgadmin' && (
-        <div id="panel-orgadmin" role="tabpanel" aria-labelledby="tab-orgadmin" className="space-y-6">
-          {/* 조직 권한 추가 */}
+        <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-bold text-gray-700 mb-4">조직 관리 권한 추가</h2>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -426,7 +529,6 @@ export default function SuperAdmin() {
             </div>
           </div>
 
-          {/* 조직 권한 목록 */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-bold text-gray-700 mb-4">현재 조직 권한 ({orgAdmins.length})</h2>
             {orgAdmins.length === 0 ? (
@@ -442,7 +544,7 @@ export default function SuperAdmin() {
                         'bg-green-100 text-green-700'
                       }`}>{oa.level}</span>
                       <span className="text-sm font-medium text-gray-700">{oa.user?.username || oa.userId}</span>
-                      <span className="text-xs text-gray-400">→ {oa.targetId}</span>
+                      <span className="text-xs text-gray-400">&rarr; {oa.targetId}</span>
                     </div>
                     <button onClick={() => handleRemoveOrgAdmin(oa.id)}
                       className="text-xs text-red-500 hover:text-red-700">해제</button>

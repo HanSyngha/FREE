@@ -40,7 +40,7 @@ export default function GoalInputForm({ level, ownerId, onCreated }: GoalInputFo
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={`${levelLabel} 목표를 자유롭게 입력하세요. AI가 자동으로 분리/태깅/매핑합니다.`}
+        placeholder={`${levelLabel} 목표를 자유롭게 입력하세요. AI가 자동으로 분리하고 상위 목표에 매핑합니다.`}
         disabled={submitting}
         maxLength={10000}
         className="w-full h-24 px-3 py-2 border border-gray-200 rounded-lg text-sm resize-y
@@ -61,7 +61,7 @@ export default function GoalInputForm({ level, ownerId, onCreated }: GoalInputFo
       {submitting && (
         <div className="flex items-center gap-2 mt-2 text-sm text-primary-600">
           <div className="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-          AI가 목표를 분리하고 태그를 생성하고 있습니다...
+          AI가 목표를 분리하고 상위 목표에 매핑하고 있습니다...
         </div>
       )}
       {error && (

@@ -60,7 +60,6 @@ model Team {
   users        User[]
   groups       Group[]
   spaces       Space[]
-  tags         Tag[]
   teamAdmins   TeamAdmin[]
   reportJobs   ReportJob[]
   reportLogs   ReportLog[]
@@ -159,7 +158,6 @@ model Item {
 
   parentItem   Item?      @relation("ItemHierarchy", fields: [parentItemId], references: [id], onDelete: SetNull)
   childItems   Item[]     @relation("ItemHierarchy")
-  itemTags     ItemTag[]
   linkedWorkLogs WorkLog[]
   linkedTodos  Todo[]
 
@@ -202,31 +200,6 @@ model Todo {
   @@index([userId, completed])
   @@index([spaceId])
   @@map("todos")
-}
-
-model Tag {
-  id        String   @id @default(uuid())
-  name      String
-  teamId    String
-  createdAt DateTime @default(now())
-
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  itemTags  ItemTag[]
-
-  @@unique([name, teamId])
-  @@map("tags")
-}
-
-model ItemTag {
-  id     String @id @default(uuid())
-  itemId String
-  tagId  String
-
-  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@unique([itemId, tagId])
-  @@map("item_tags")
 }
 
 model OrgAdmin {
@@ -362,6 +335,15 @@ model Announcement {
   author    User     @relation(fields: [authorId], references: [id])
 
   @@map("announcements")
+}
+
+model LLMOperationConfig {
+  id        String   @id @default(uuid())
+  operation String   @unique  // PARSE_GOALS, PARSE_TEXT, LINK_TODO, AUTO_MAP, UPDATE_PROGRESS, REPORT
+  modelId   String
+  updatedAt DateTime @updatedAt
+
+  @@map("llm_operation_configs")
 }
 
 model ActivityLog {
