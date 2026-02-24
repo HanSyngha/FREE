@@ -21,6 +21,7 @@ export default function PartSpace() {
   const { user, isSuperAdmin, isTeamAdmin } = useAuthStore();
   const [data, setData] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
+  const [groupGoals, setGroupGoals] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [showOlderReports, setShowOlderReports] = useState(false);
 
@@ -35,6 +36,15 @@ export default function PartSpace() {
       ]);
       setData(spaceRes.data);
       setGoals(goalsRes.data.goals || []);
+
+      // 상위 그룹 목표 조회 (parentCandidates용)
+      const gId = spaceRes.data.part?.groupId;
+      if (gId) {
+        try {
+          const gRes = await goalsApi.getAll({ level: 'GROUP', ownerId: gId });
+          setGroupGoals((gRes.data.goals || []).map((g: any) => ({ id: g.id, title: g.title })));
+        } catch { setGroupGoals([]); }
+      }
     } catch {} finally {
       setLoading(false);
     }
@@ -85,7 +95,7 @@ export default function PartSpace() {
           <h2 className="text-sm font-semibold text-gray-500 mb-3">파트 목표 ({goals.length})</h2>
           <div className="space-y-3">
             {goals.map((goal: any) => (
-              <GoalCard key={goal.id} goal={goal} canEdit={isPartAdmin} onUpdate={fetchData} />
+              <GoalCard key={goal.id} goal={goal} canEdit={isPartAdmin} onUpdate={fetchData} parentCandidates={groupGoals} />
             ))}
           </div>
         </div>

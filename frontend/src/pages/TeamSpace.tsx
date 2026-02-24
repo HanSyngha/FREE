@@ -36,6 +36,7 @@ export default function TeamSpace() {
   const [triggeringReport, setTriggeringReport] = useState(false);
   const [triggeringProgress, setTriggeringProgress] = useState(false);
   const [triggerMsg, setTriggerMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [buGoals, setBuGoals] = useState<Array<{ id: string; title: string }>>([]);
 
   const isTeamLevel = isSuperAdmin || isTeamAdmin;
 
@@ -45,6 +46,13 @@ export default function TeamSpace() {
       setData(spaceRes.data);
 
       const teamId = spaceRes.data.team?.id;
+      const buId = spaceRes.data.team?.businessUnit?.id;
+      if (buId) {
+        try {
+          const buRes = await goalsApi.getAll({ level: 'BU', ownerId: buId });
+          setBuGoals((buRes.data.goals || []).map((g: any) => ({ id: g.id, title: g.title })));
+        } catch { setBuGoals([]); }
+      }
       if (teamId) {
         const goalsRes = await goalsApi.getAll({ level: 'TEAM', ownerId: teamId });
         setGoals(goalsRes.data.goals || []);
@@ -255,7 +263,7 @@ export default function TeamSpace() {
           <h2 className="text-sm font-semibold text-gray-500 mb-3">팀 목표 ({goals.length})</h2>
           <div className="space-y-3">
             {goals.map((goal: any) => (
-              <GoalCard key={goal.id} goal={goal} canEdit={isTeamLevel} onUpdate={fetchData} />
+              <GoalCard key={goal.id} goal={goal} canEdit={isTeamLevel} onUpdate={fetchData} parentCandidates={buGoals} />
             ))}
           </div>
         </div>
