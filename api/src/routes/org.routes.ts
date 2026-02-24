@@ -155,7 +155,7 @@ orgRoutes.put('/groups/:id', authenticateToken, async (req: AuthenticatedRequest
     const user = await resolveUser(req);
     if (!user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { name } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'name은 필수입니다.' }); return; }
 
@@ -180,7 +180,7 @@ orgRoutes.delete('/groups/:id', authenticateToken, async (req: AuthenticatedRequ
     const user = await resolveUser(req);
     if (!user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     if (!(await canManageTeam(user, ''))) {
       // 그룹 삭제는 TeamAdmin+ 전용 → 먼저 그룹의 teamId 확인
@@ -252,7 +252,7 @@ orgRoutes.put('/parts/:id', authenticateToken, async (req: AuthenticatedRequest,
     const user = await resolveUser(req);
     if (!user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { name } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'name은 필수입니다.' }); return; }
 
@@ -277,7 +277,7 @@ orgRoutes.delete('/parts/:id', authenticateToken, async (req: AuthenticatedReque
     const user = await resolveUser(req);
     if (!user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const part = await prisma.part.findUnique({
       where: { id },
@@ -314,7 +314,7 @@ orgRoutes.put('/users/:id/reassign', authenticateToken, async (req: Authenticate
     const callerUser = await resolveUser(req);
     if (!callerUser) { res.status(401).json({ error: 'Authentication required' }); return; }
 
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { groupId, partId } = req.body;
     if (!groupId || !partId) { res.status(400).json({ error: 'groupId, partId는 필수입니다.' }); return; }
 
