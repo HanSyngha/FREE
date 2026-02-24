@@ -4,9 +4,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, reportsApi, goalsApi } from '../services/api';
+import { spacesApi, reportsApi, goalsApi, orgApi } from '../services/api';
 import GoalCard from '../components/goal/GoalCard';
 import GoalInputForm from '../components/goal/GoalInputForm';
+import OrgChart from '../components/common/OrgChart';
+import type { OrgNode } from '../components/common/OrgChart';
 import DashboardGrid from '../components/spaces/DashboardGrid';
 import DashboardSection from '../components/spaces/DashboardSection';
 
@@ -24,6 +26,7 @@ export default function PartSpace() {
   const [data, setData] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
   const [groupGoals, setGroupGoals] = useState<Array<{ id: string; title: string }>>([]);
+  const [orgTree, setOrgTree] = useState<OrgNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOlderReports, setShowOlderReports] = useState(false);
   const [showAllGoals, setShowAllGoals] = useState(false);
@@ -50,6 +53,12 @@ export default function PartSpace() {
           const gRes = await goalsApi.getAll({ level: 'GROUP', ownerId: gId });
           setGroupGoals((gRes.data.goals || []).map((g: any) => ({ id: g.id, title: g.title })));
         } catch { setGroupGoals([]); }
+      }
+
+      // 조직도
+      const tId = spaceRes.data.part?.group?.teamId || spaceRes.data.teamId;
+      if (tId) {
+        try { const treeRes = await orgApi.getTree(tId); setOrgTree(treeRes.data.tree); } catch {}
       }
     } catch {} finally {
       setLoading(false);
@@ -101,9 +110,16 @@ export default function PartSpace() {
 
       <DashboardGrid
         top={
-          isPartAdmin && partId ? (
-            <GoalInputForm level="PART" ownerId={partId} onCreated={fetchData} />
-          ) : undefined
+          <>
+            {orgTree && (
+              <DashboardSection title="조직도" colorBar="blue">
+                <OrgChart root={orgTree} currentId={partId} />
+              </DashboardSection>
+            )}
+            {isPartAdmin && partId && (
+              <GoalInputForm level="PART" ownerId={partId} onCreated={fetchData} />
+            )}
+          </>
         }
         left={
           <DashboardSection

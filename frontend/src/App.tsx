@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { authApi } from './services/api';
@@ -14,7 +14,7 @@ import BUSpace from './pages/BUSpace';
 import ReportDetail from './pages/ReportDetail';
 import Profile from './pages/Profile';
 import SuperAdmin from './pages/SuperAdmin';
-import TeamAdmin from './pages/TeamAdmin';
+import OrgAdmin from './pages/OrgAdmin';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
@@ -37,7 +37,6 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { setAuth, setIsLoading, logout } = useAuthStore();
-  const navigate = useNavigate();
 
   useEffect(() => {
     const token = localStorage.getItem('free_token');
@@ -51,6 +50,7 @@ export default function App() {
           user: res.data.user,
           isSuperAdmin: res.data.isSuperAdmin,
           isTeamAdmin: res.data.isTeamAdmin,
+          orgAdminLevels: res.data.orgAdminLevels || [],
           needsOnboarding: res.data.needsOnboarding,
           spaces: res.data.spaces,
         });
@@ -83,8 +83,9 @@ export default function App() {
         <Route path="/space/bu/:buId" element={<BUSpace />} />
         <Route path="/report/:id" element={<ReportDetail />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/admin/org" element={<OrgAdmin />} />
         <Route path="/admin/super" element={<SuperAdmin />} />
-        <Route path="/admin/team" element={<TeamAdmin />} />
+        <Route path="/admin/team" element={<Navigate to="/admin/org" />} />
       </Route>
       <Route path="/" element={<Navigate to="/space/personal" />} />
       <Route path="*" element={<Navigate to="/space/personal" />} />
