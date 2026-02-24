@@ -109,18 +109,9 @@ export default function PartSpace() {
       <p className="text-sm text-gray-500 mb-4">{data.users?.length || 0}명</p>
 
       <DashboardGrid
-        top={
-          <>
-            {orgTree && (
-              <DashboardSection title="조직도" colorBar="blue">
-                <OrgChart root={orgTree} currentId={partId} />
-              </DashboardSection>
-            )}
-            {isPartAdmin && partId && (
-              <GoalInputForm level="PART" ownerId={partId} onCreated={fetchData} />
-            )}
-          </>
-        }
+        top={isPartAdmin && partId ? (
+          <GoalInputForm level="PART" ownerId={partId} onCreated={fetchData} />
+        ) : undefined}
         left={
           <DashboardSection
             title="파트 목표"
@@ -144,18 +135,24 @@ export default function PartSpace() {
           </DashboardSection>
         }
         right={
-          <DashboardSection
-            title="업무 기록"
-            colorBar="green"
-            isEmpty={sortedDates.length === 0}
-            emptyText="등록된 업무 기록이 없습니다"
-            headerRight={hasMoreDates ? (
-              <button onClick={() => setShowAllDates(!showAllDates)}
-                className="text-xs text-primary-600 hover:text-primary-700">
-                {showAllDates ? '접기' : `전체 보기 (${sortedDates.length}일)`}
-              </button>
-            ) : undefined}
-          >
+          <>
+            {orgTree && (
+              <DashboardSection title="조직도" colorBar="blue">
+                <OrgChart root={orgTree} currentId={partId} />
+              </DashboardSection>
+            )}
+            <DashboardSection
+              title="업무 기록"
+              colorBar="green"
+              isEmpty={sortedDates.length === 0}
+              emptyText="등록된 업무 기록이 없습니다"
+              headerRight={hasMoreDates ? (
+                <button onClick={() => setShowAllDates(!showAllDates)}
+                  className="text-xs text-primary-600 hover:text-primary-700">
+                  {showAllDates ? '접기' : `전체 보기 (${sortedDates.length}일)`}
+                </button>
+              ) : undefined}
+            >
             {visibleDates.map(dateKey => (
               <div key={dateKey} className="mb-4 last:mb-0">
                 <h3 className="text-xs font-semibold text-gray-500 mb-2">{dateKey}</h3>
@@ -183,6 +180,7 @@ export default function PartSpace() {
               </div>
             ))}
           </DashboardSection>
+          </>
         }
         bottom={
           reports.length > 0 ? (

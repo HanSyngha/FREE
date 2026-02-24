@@ -31,11 +31,6 @@ export default function Profile() {
   const [newPartName, setNewPartName] = useState('');
   const [isNewGroup, setIsNewGroup] = useState(false);
   const [isNewPart, setIsNewPart] = useState(false);
-  const [normalizedName, setNormalizedName] = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [normalizeTarget, setNormalizeTarget] = useState<'group' | 'part' | null>(null);
-  const [groupNormalized, setGroupNormalized] = useState(false);
-  const [partNormalized, setPartNormalized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -71,34 +66,9 @@ export default function Profile() {
     }
   }, [selectedGroupId]);
 
-  const handleNormalize = async (name: string, target: 'group' | 'part') => {
-    try {
-      const res = await onboardingApi.normalizeName(name);
-      setNormalizedName(res.data.normalized);
-      setNormalizeTarget(target);
-      setShowConfirm(true);
-    } catch { setError('이름 정규화에 실패했습니다.'); }
-  };
-
-  // 신규 이름 직접 변경 시 정규화 상태 리셋
-  useEffect(() => { setGroupNormalized(false); }, [newGroupName]);
-  useEffect(() => { setPartNormalized(false); }, [newPartName]);
-
   const handleSaveOrg = async () => {
     setSaving(true);
     setError('');
-
-    if (isNewGroup && newGroupName && !groupNormalized) {
-      await handleNormalize(newGroupName, 'group');
-      setSaving(false);
-      return;
-    }
-    if (isNewPart && newPartName && !partNormalized) {
-      await handleNormalize(newPartName, 'part');
-      setSaving(false);
-      return;
-    }
-
     try {
       const data: any = {};
       if (isNewGroup) data.groupName = newGroupName;
@@ -283,20 +253,6 @@ export default function Profile() {
           <h2 className="text-sm font-bold text-gray-700 mb-4">그룹/파트 변경</h2>
 
           {error && <div className="mb-3 p-2 bg-red-50 text-red-600 text-sm rounded">{error}</div>}
-
-          {showConfirm && (
-            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800 mb-2">정규화 결과: <strong>{normalizedName}</strong></p>
-              <div className="flex gap-2">
-                <button onClick={() => {
-                  if (normalizeTarget === 'group') { setGroupNormalized(true); setNewGroupName(normalizedName); }
-                  else { setPartNormalized(true); setNewPartName(normalizedName); }
-                  setShowConfirm(false);
-                }} className="px-3 py-1 bg-primary-600 text-white text-sm rounded">확인</button>
-                <button onClick={() => setShowConfirm(false)} className="px-3 py-1 bg-gray-200 text-sm rounded">취소</button>
-              </div>
-            </div>
-          )}
 
           {/* 그룹 */}
           <div className="mb-4">

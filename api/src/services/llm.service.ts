@@ -360,31 +360,6 @@ export async function parseItemsWithLLM(
   });
 }
 
-/**
- * 그룹/파트 이름 정규화
- */
-export async function normalizeNameWithLLM(
-  userInput: string,
-  userInfo: { loginid: string; username: string; deptname: string }
-): Promise<string> {
-  const systemPrompt = `다음 텍스트를 조직명으로 정규화해 주세요.
-규칙: 영문은 대문자, 띄어쓰기 제거, 한글 유지
-
-예시:
-- "kpi group" → "KPI그룹"
-- "ax 파트" → "AX파트"
-- "platform team" → "Platform팀"
-
-정규화된 이름만 출력하세요. 다른 텍스트는 포함하지 마세요.`;
-
-  const result = await callLLM(
-    [{ role: 'system', content: systemPrompt }, { role: 'user', content: userInput }],
-    userInfo
-  );
-
-  return result.trim();
-}
-
 
 /**
  * LLM으로 조직장 Item 입력 → 목표 분리+매핑

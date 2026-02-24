@@ -159,16 +159,9 @@ export default function TeamSpace() {
   const latestReport = reports[0];
   const olderReports = reports.slice(1);
 
-  // 상단 영역: 조직도 + 공지 + 실패보고서 + 목표입력
+  // 상단 영역: 공지 + 실패보고서 + 목표입력
   const topContent = (
     <>
-      {/* 조직도 */}
-      {orgTree && (
-        <DashboardSection title="조직도" colorBar="blue">
-          <OrgChart root={orgTree} currentId={data.team?.id} />
-        </DashboardSection>
-      )}
-
       {/* 공지 */}
       {data.announcement && !showAnnouncementForm && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -308,8 +301,14 @@ export default function TeamSpace() {
           </>
         }
         right={
-          <DashboardSection
-            title="업무 기록"
+          <>
+            {orgTree && (
+              <DashboardSection title="조직도" colorBar="blue">
+                <OrgChart root={orgTree} currentId={data.team?.id} />
+              </DashboardSection>
+            )}
+            <DashboardSection
+              title="업무 기록"
             colorBar="green"
             isEmpty={sortedDates.length === 0}
             emptyText="등록된 업무 기록이 없습니다"
@@ -349,6 +348,7 @@ export default function TeamSpace() {
               </div>
             ))}
           </DashboardSection>
+          </>
         }
         bottom={
           reports.length > 0 ? (

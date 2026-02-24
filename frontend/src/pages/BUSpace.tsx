@@ -59,32 +59,9 @@ export default function BUSpace() {
       <p className="text-sm text-gray-500 mb-4">사업부</p>
 
       <DashboardGrid
-        top={
-          <>
-            {/* BU → Team 조직도 */}
-            {data.bu.teams?.length > 0 && (
-              <DashboardSection title="조직도" colorBar="blue">
-                <OrgChart
-                  root={{
-                    id: data.bu.id,
-                    name: data.bu.name,
-                    type: 'BU',
-                    children: (data.bu.teams || []).map((t: any) => ({
-                      id: t.id,
-                      name: t.name,
-                      type: 'TEAM' as const,
-                      children: [],
-                    })),
-                  }}
-                  currentId={buId}
-                />
-              </DashboardSection>
-            )}
-            {isSuperAdmin && buId && (
-              <GoalInputForm level="BU" ownerId={buId} onCreated={fetchData} />
-            )}
-          </>
-        }
+        top={isSuperAdmin && buId ? (
+          <GoalInputForm level="BU" ownerId={buId} onCreated={fetchData} />
+        ) : undefined}
         left={
           <DashboardSection
             title="사업부 목표"
@@ -108,8 +85,27 @@ export default function BUSpace() {
           </DashboardSection>
         }
         right={
-          <DashboardSection
-            title="팀별 목표"
+          <>
+            {data.bu.teams?.length > 0 && (
+              <DashboardSection title="조직도" colorBar="blue">
+                <OrgChart
+                  root={{
+                    id: data.bu.id,
+                    name: data.bu.name,
+                    type: 'BU',
+                    children: (data.bu.teams || []).map((t: any) => ({
+                      id: t.id,
+                      name: t.name,
+                      type: 'TEAM' as const,
+                      children: [],
+                    })),
+                  }}
+                  currentId={buId}
+                />
+              </DashboardSection>
+            )}
+            <DashboardSection
+              title="팀별 목표"
             count={(data.bu.teams || []).length}
             colorBar="blue"
             isEmpty={(data.bu.teams || []).length === 0}
@@ -146,6 +142,7 @@ export default function BUSpace() {
               })}
             </div>
           </DashboardSection>
+          </>
         }
       />
     </div>
