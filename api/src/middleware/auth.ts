@@ -233,10 +233,6 @@ export function requireGoalEdit() {
 
     // SuperAdmin → 통과
     if (isSuperAdmin(req.user.loginid)) { req.isSuperAdmin = true; next(); return; }
-    if ((user as any).email) {
-      const { isAdmin } = await checkAdminStatus((user as any).email);
-      if (isAdmin) { req.isSuperAdmin = true; next(); return; }
-    }
 
     // TeamAdmin → 통과
     const teamAdmins = await prisma.teamAdmin.findMany({ where: { userId: user.id } });
@@ -277,10 +273,6 @@ export function requireOrgAdmin(level: string, targetIdParam: string) {
 
     // SuperAdmin은 항상 통과
     if (isSuperAdmin(req.user.loginid)) { req.isSuperAdmin = true; next(); return; }
-    if (user.email) {
-      const { isAdmin } = await checkAdminStatus(user.email);
-      if (isAdmin) { req.isSuperAdmin = true; next(); return; }
-    }
 
     // TeamAdmin은 항상 통과
     if (user.teamAdmins.length > 0) {
@@ -334,10 +326,6 @@ export async function getVisibleScope(userId: string): Promise<VisibleScope> {
 
   // SuperAdmin → 전체
   if (isSuperAdmin(user.loginid)) return { level: 'SUPER', editLevel: 'SUPER' };
-  if (user.email) {
-    const { isAdmin } = await checkAdminStatus(user.email);
-    if (isAdmin) return { level: 'SUPER', editLevel: 'SUPER' };
-  }
 
   // TeamAdmin → 팀 전체
   if (user.teamAdmins.length > 0) {

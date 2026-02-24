@@ -859,7 +859,7 @@ async function callOrgWorkLogLLM(orgName: string, goalTitle: string, logsText: s
   return await callWithRetry([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: logsText },
-  ], 'ORG_WORKLOG_SUMMARY');
+  ]);
 }
 
 // ========== BullMQ Workers ==========
