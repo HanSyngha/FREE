@@ -79,6 +79,7 @@ export const goalsApi = {
   delete: (id: string) => api.delete(`/goals/${id}`),
   updateMapping: (id: string, data: { parentItemId?: string | null; childItemIds?: string[] }) =>
     api.put(`/goals/${id}/mapping`, data),
+  getDashboard: () => api.get('/goals/dashboard'),
 };
 
 // ==================== Todos ====================
