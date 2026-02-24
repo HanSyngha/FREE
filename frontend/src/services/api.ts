@@ -53,7 +53,6 @@ export const onboardingApi = {
   getParts: (groupId: string) => api.get('/onboarding/parts', { params: { groupId } }),
   setup: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
     api.post('/onboarding/setup', data),
-  normalizeName: (name: string) => api.post('/onboarding/normalize-name', { name }),
 };
 
 // ==================== WorkLogs ====================

@@ -2,7 +2,7 @@
  * Onboarding Page - 최초 로그인 그룹/파트 선택
  * Step 1: 그룹 선택/생성 → Step 2: 파트 선택/생성 → 완료
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { onboardingApi, authApi } from '../services/api';
@@ -24,14 +24,6 @@ export default function Onboarding() {
   const [isNewGroup, setIsNewGroup] = useState(false);
   const [isNewPart, setIsNewPart] = useState(false);
 
-  // 정규화 상태
-  const [normalizedName, setNormalizedName] = useState('');
-  const [normalizeTarget, setNormalizeTarget] = useState<'group' | 'part' | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [groupNormalized, setGroupNormalized] = useState(false);
-  const [partNormalized, setPartNormalized] = useState(false);
-  const programmaticSet = useRef(false);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -47,69 +39,19 @@ export default function Onboarding() {
     }
   }, [selectedGroupId]);
 
-  // 사용자가 직접 타이핑할 때만 정규화 상태 리셋
-  const handleGroupNameChange = (val: string) => {
-    setNewGroupName(val);
-    setGroupNormalized(false);
-  };
-
-  const handlePartNameChange = (val: string) => {
-    setNewPartName(val);
-    setPartNormalized(false);
-  };
-
-  const handleNormalize = async (name: string, target: 'group' | 'part') => {
-    try {
-      setLoading(true);
-      const res = await onboardingApi.normalizeName(name);
-      setNormalizedName(res.data.normalized);
-      setNormalizeTarget(target);
-      setShowConfirm(true);
-    } catch {
-      setError('이름 정규화에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const confirmNormalize = () => {
-    programmaticSet.current = true;
-    if (normalizeTarget === 'group') {
-      setNewGroupName(normalizedName);
-      setGroupNormalized(true);
-    } else {
-      setNewPartName(normalizedName);
-      setPartNormalized(true);
-    }
-    setShowConfirm(false);
-  };
-
   // Step 1: 그룹 확정
-  const handleGroupNext = async () => {
+  const handleGroupNext = () => {
     setError('');
-
-    if (isNewGroup && newGroupName && !groupNormalized) {
-      await handleNormalize(newGroupName, 'group');
-      return;
-    }
-
     if (!selectedGroupId && !newGroupName) {
       setError('그룹을 선택하거나 새로 입력해 주세요.');
       return;
     }
-
     setStep('part');
   };
 
   // Step 2: 최종 제출
   const handleSubmit = async () => {
     setError('');
-
-    if (isNewPart && newPartName && !partNormalized) {
-      await handleNormalize(newPartName, 'part');
-      return;
-    }
-
     if (!selectedPartId && !newPartName) {
       setError('파트를 선택하거나 새로 입력해 주세요.');
       return;
@@ -170,24 +112,6 @@ export default function Onboarding() {
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
         )}
 
-        {/* 정규화 확인 모달 */}
-        {showConfirm && (
-          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800 font-medium mb-2">이름이 다음과 같이 정규화됩니다:</p>
-            <p className="text-lg font-bold text-blue-900 mb-3">{normalizedName}</p>
-            <div className="flex gap-2">
-              <button onClick={confirmNormalize}
-                className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">
-                확인
-              </button>
-              <button onClick={() => setShowConfirm(false)}
-                className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">
-                다시 입력
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Step 1: 그룹 */}
         {step === 'group' && (
           <div>
@@ -210,12 +134,11 @@ export default function Onboarding() {
               <div>
                 <input
                   value={newGroupName}
-                  onChange={(e) => handleGroupNameChange(e.target.value)}
-                  placeholder="예: Agent Enabler → AE그룹"
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="새 그룹 이름"
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
                 />
-                <p className="mt-1 text-xs text-gray-400">긴 영문명은 축약하세요 (Agent Enabler → AE그룹)</p>
-                <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); setGroupNormalized(false); }}
+                <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); }}
                   className="mt-1 text-xs text-gray-500 hover:underline">
                   기존 그룹에서 선택
                 </button>
@@ -267,12 +190,11 @@ export default function Onboarding() {
               <div>
                 <input
                   value={newPartName}
-                  onChange={(e) => handlePartNameChange(e.target.value)}
-                  placeholder="예: Agent Enabler → AE파트"
+                  onChange={(e) => setNewPartName(e.target.value)}
+                  placeholder="새 파트 이름"
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
                 />
-                <p className="mt-1 text-xs text-gray-400">긴 영문명은 축약하세요 (Agent Enabler → AE파트)</p>
-                <button onClick={() => { setIsNewPart(false); setNewPartName(''); setPartNormalized(false); }}
+                <button onClick={() => { setIsNewPart(false); setNewPartName(''); }}
                   className="mt-1 text-xs text-gray-500 hover:underline">
                   기존 파트에서 선택
                 </button>
