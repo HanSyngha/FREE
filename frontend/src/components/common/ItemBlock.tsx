@@ -10,6 +10,7 @@ interface WorkLogBlockProps {
     content: string;
     link: string | null;
     date: string;
+    linkedItem?: { id: string; title: string } | null;
   };
   editable?: boolean;
   deletable?: boolean;
@@ -117,7 +118,14 @@ export default function WorkLogBlock({ item, editable = false, deletable = false
 
           <p className="text-sm text-gray-600 whitespace-pre-wrap">{item.content}</p>
 
-          <p className="text-xs text-gray-400 mt-2">{item.date.split('T')[0]}</p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-gray-400">{item.date.split('T')[0]}</span>
+            {item.linkedItem && (
+              <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
+                {item.linkedItem.title}
+              </span>
+            )}
+          </div>
 
           {/* 링크 입력 팝업 */}
           {showLinkInput && editable && (

@@ -183,6 +183,7 @@ goalRoutes.get('/dashboard', authenticateToken, loadUser, async (req: Authentica
       },
       include: {
         itemTags: { include: { tag: true } },
+        parentItem: { select: { id: true, title: true, level: true } },
       },
     });
 
@@ -221,6 +222,7 @@ goalRoutes.get('/dashboard', authenticateToken, loadUser, async (req: Authentica
         startDate: g.startDate,
         endDate: g.endDate,
         tags: g.itemTags.map(it => it.tag.name),
+        parentItem: g.parentItem || null,
       }));
 
     res.json({ tagProgress, ganttData, totalGoals: allGoals.length });

@@ -81,6 +81,7 @@ spaceRoutes.get('/personal/:userId', authenticateToken, loadUser, generalLimit, 
 
     const workLogs = await prisma.workLog.findMany({
       where: { userId, spaceId: space.id, date: { gte: start, lte: end } },
+      include: { linkedItem: { select: { id: true, title: true } } },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
@@ -127,14 +128,20 @@ spaceRoutes.get('/part/:partId', authenticateToken, loadUser, generalLimit, asyn
     const userIds = users.map(u => u.id);
     const workLogs = await prisma.workLog.findMany({
       where: { userId: { in: userIds }, date: { gte: start, lte: end } },
-      include: { user: { select: { id: true, username: true, loginid: true } } },
+      include: {
+        user: { select: { id: true, username: true, loginid: true } },
+        linkedItem: { select: { id: true, title: true } },
+      },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
     // 파트 목표(Item) 조회
     const goals = await prisma.item.findMany({
       where: { level: 'PART', ownerId: partId },
-      include: { itemTags: { include: { tag: true } } },
+      include: {
+        itemTags: { include: { tag: true } },
+        parentItem: { select: { id: true, title: true, level: true } },
+      },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
 
@@ -178,7 +185,10 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
     const allUserIds = parts.flatMap(p => p.users.map(u => u.id));
     const workLogs = await prisma.workLog.findMany({
       where: { userId: { in: allUserIds }, date: { gte: start, lte: end } },
-      include: { user: { select: { id: true, username: true, loginid: true, partId: true } } },
+      include: {
+        user: { select: { id: true, username: true, loginid: true, partId: true } },
+        linkedItem: { select: { id: true, title: true } },
+      },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
 
@@ -188,6 +198,7 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
       include: {
         itemTags: { include: { tag: true } },
         childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+        parentItem: { select: { id: true, title: true, level: true } },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
@@ -251,6 +262,7 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
             part: { select: { id: true, name: true } },
           },
         },
+        linkedItem: { select: { id: true, title: true } },
       },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
@@ -261,6 +273,7 @@ spaceRoutes.get('/team', authenticateToken, loadUser, generalLimit, async (req: 
       include: {
         itemTags: { include: { tag: true } },
         childItems: { select: { id: true, title: true, progress: true, status: true, level: true } },
+        parentItem: { select: { id: true, title: true, level: true } },
       },
       orderBy: [{ status: 'asc' }, { endDate: 'asc' }],
     });
