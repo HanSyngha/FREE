@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { prisma } from '../index.js';
 import {
   authenticateToken, AuthenticatedRequest,
-  isSuperAdmin, checkAdminStatus,
+  isSuperAdmin,
 } from '../middleware/auth.js';
 
 export const orgRoutes = Router();
@@ -23,18 +23,13 @@ async function resolveUser(req: AuthenticatedRequest) {
   });
 }
 
-async function isSuperOrDbAdmin(loginid: string, email: string | null): Promise<boolean> {
-  if (isSuperAdmin(loginid)) return true;
-  if (email) {
-    const { isAdmin } = await checkAdminStatus(email);
-    if (isAdmin) return true;
-  }
-  return false;
+async function isSuperOrDbAdmin(loginid: string, _email: string | null): Promise<boolean> {
+  return isSuperAdmin(loginid);
 }
 
 /** 그룹 관리 권한 (생성/이름수정/삭제/사용자재배치) */
 async function canManageGroup(user: any, groupId: string): Promise<boolean> {
-  if (await isSuperOrDbAdmin(user.loginid, user.email)) return true;
+  if (await isSuperOrDbAdmin(user.loginid, null)) return true;
   if (user.teamAdmins.length > 0) return true;
 
   const group = await prisma.group.findUnique({ where: { id: groupId }, select: { teamId: true } });
@@ -49,7 +44,7 @@ async function canManageGroup(user: any, groupId: string): Promise<boolean> {
 
 /** 팀 레벨 관리 권한 (그룹 생성 등) */
 async function canManageTeam(user: any, teamId: string): Promise<boolean> {
-  if (await isSuperOrDbAdmin(user.loginid, user.email)) return true;
+  if (await isSuperOrDbAdmin(user.loginid, null)) return true;
   if (user.teamAdmins.some((ta: any) => ta.teamId === teamId)) return true;
   return user.orgAdmins.some((oa: any) => oa.level === 'TEAM' && oa.targetId === teamId);
 }
