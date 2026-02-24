@@ -64,7 +64,7 @@ export default function ReportDetail() {
           <h1 className="text-xl font-bold text-gray-900">{typeLabel} 주간 보고서</h1>
           <p className="text-sm text-gray-500">
             {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
-            {' | '}생성: {new Date(report.createdAt).toLocaleString('ko-KR')}
+            {' | '}생성: {new Date(report.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
           </p>
         </div>
         <div className="flex gap-2">
