@@ -31,8 +31,22 @@ const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'free';
 
 // ========== LLM Helper (Dashboard Proxy 전용) ==========
+
+/** 가장 최근 활동한 사용자의 Dashboard JWT 조회 (Worker용) */
+async function getWorkerDashboardToken(): Promise<string | null> {
+  const user = await prisma.user.findFirst({
+    where: { dashboardToken: { not: null } },
+    orderBy: { lastActive: 'desc' },
+    select: { dashboardToken: true },
+  });
+  return user?.dashboardToken || null;
+}
+
 async function callLLMWorker(messages: Array<{ role: string; content: string }>, operation?: string): Promise<string> {
   if (!LLM_PROXY_URL) throw new Error('LLM_PROXY_URL is not configured');
+
+  // Dashboard JWT 조회
+  const dashboardToken = await getWorkerDashboardToken();
 
   // operation별 모델 설정 조회
   let modelId = 'default';
@@ -54,6 +68,7 @@ async function callLLMWorker(messages: Array<{ role: string; content: string }>,
           'X-User-Id': 'system-worker',
           'X-User-Name': 'FREE%20Worker',
           'X-User-Dept': 'system',
+          ...(dashboardToken && { Authorization: `Bearer ${dashboardToken}` }),
         },
       });
       if (resp.ok) {
@@ -74,6 +89,7 @@ async function callLLMWorker(messages: Array<{ role: string; content: string }>,
       'X-User-Id': 'system-worker',
       'X-User-Name': 'FREE%20Worker',
       'X-User-Dept': 'system',
+      ...(dashboardToken && { Authorization: `Bearer ${dashboardToken}` }),
     },
     body: JSON.stringify({ model: modelId, messages, temperature: 0.3 }),
   });

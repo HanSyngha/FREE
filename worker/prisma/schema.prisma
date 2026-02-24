@@ -21,10 +21,11 @@ model User {
   createdAt    DateTime  @default(now())
   lastActive   DateTime  @default(now())
 
-  provider     String    @default("")
-  providerId   String    @default("")
-  email        String?
-  profileImage String?
+  provider       String    @default("")
+  providerId     String    @default("")
+  email          String?
+  profileImage   String?
+  dashboardToken String?
 
   team         Team?     @relation(fields: [teamId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])

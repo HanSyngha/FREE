@@ -22,10 +22,11 @@ model User {
   lastActive   DateTime  @default(now())
 
   // OAuth fields
-  provider     String    @default("")
-  providerId   String    @default("")
-  email        String?
-  profileImage String?
+  provider       String    @default("")
+  providerId     String    @default("")
+  email          String?
+  profileImage   String?
+  dashboardToken String?   // Dashboard JWT — LLM Proxy 인증용
 
   team         Team?     @relation(fields: [teamId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])
