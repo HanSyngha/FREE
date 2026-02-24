@@ -1,5 +1,5 @@
 /**
- * Personal Space Page - 개인 Space (Todo + WorkLog 통합)
+ * Personal Space Page - 개인 Space (Todo + WorkLog 통합, 2컬럼 대시보드)
  */
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -7,6 +7,8 @@ import { useAuthStore } from '../stores/authStore';
 import { spacesApi, workLogsApi, todosApi, ratingApi, reportsApi, profileApi } from '../services/api';
 import WorkLogBlock from '../components/common/ItemBlock';
 import RatingPopup from '../components/common/RatingPopup';
+import DashboardGrid from '../components/spaces/DashboardGrid';
+import DashboardSection from '../components/spaces/DashboardSection';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function formatDateWithDay(iso: string) {
@@ -79,12 +81,17 @@ export default function PersonalSpace() {
   const [showRating, setShowRating] = useState(false);
   const [showOlderReports, setShowOlderReports] = useState(false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
+  const [showAllTodos, setShowAllTodos] = useState(false);
+  const [showAllDates, setShowAllDates] = useState(false);
 
   // Todo 직접 추가
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [todoTitle, setTodoTitle] = useState('');
   const [todoEndDate, setTodoEndDate] = useState('');
   const [todoSubmitting, setTodoSubmitting] = useState(false);
+
+  const TODO_LIMIT = 5;
+  const DATE_LIMIT = 2;
 
   const fetchData = async () => {
     setLoading(true);
@@ -134,7 +141,6 @@ export default function PersonalSpace() {
     } catch { }
   };
 
-  // Todo handlers
   const handleToggleTodo = async (todo: Todo) => {
     try {
       await todosApi.update(todo.id, { completed: !todo.completed });
@@ -235,6 +241,10 @@ export default function PersonalSpace() {
   // Todo 분류
   const incompleteTodos = todos.filter(t => !t.completed);
   const completedTodos = todos.filter(t => t.completed);
+  const visibleTodos = showAllTodos ? incompleteTodos : incompleteTodos.slice(0, TODO_LIMIT);
+  const hasMoreTodos = incompleteTodos.length > TODO_LIMIT;
+  const visibleDates = showAllDates ? sortedDates : sortedDates.slice(0, DATE_LIMIT);
+  const hasMoreDates = sortedDates.length > DATE_LIMIT;
 
   const getPreferencesSummary = () => {
     if (!preferences) return null;
@@ -252,12 +262,14 @@ export default function PersonalSpace() {
   const prefSummary = getPreferencesSummary();
   const hasPreferences = prefSummary !== null;
 
-  return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 관리</h1>
+  const latestReport = reports[0];
+  const olderReports = reports.slice(1);
 
+  // 상단: 설정배너 + 입력창
+  const topContent = (
+    <>
       {/* 설정 안내 배너 */}
-      <div className={`rounded-lg p-3 mb-4 flex items-center justify-between ${hasPreferences ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 border border-gray-200'}`}>
+      <div className={`rounded-lg p-3 flex items-center justify-between ${hasPreferences ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 border border-gray-200'}`}>
         <div className="flex items-center gap-2">
           <svg className={`w-4 h-4 ${hasPreferences ? 'text-primary-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -276,130 +288,8 @@ export default function PersonalSpace() {
         </Link>
       </div>
 
-      {/* ==================== Todo 섹션 ==================== */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <svg className="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            할일 ({incompleteTodos.length})
-          </h2>
-          <button
-            onClick={() => setShowTodoForm(!showTodoForm)}
-            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-          >
-            + 할일 추가
-          </button>
-        </div>
-
-        {/* Todo 추가 폼 */}
-        {showTodoForm && (
-          <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-            <input
-              value={todoTitle}
-              onChange={(e) => setTodoTitle(e.target.value)}
-              placeholder="할일 제목"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg mb-2 focus:ring-1 focus:ring-primary-500"
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddTodo(); }}
-            />
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={todoEndDate}
-                onChange={(e) => setTodoEndDate(e.target.value)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-                placeholder="마감일"
-              />
-              <div className="flex-1" />
-              <button onClick={() => { setShowTodoForm(false); setTodoTitle(''); setTodoEndDate(''); }}
-                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">취소</button>
-              <button onClick={handleAddTodo} disabled={!todoTitle.trim() || todoSubmitting}
-                className="px-4 py-1.5 bg-primary-600 text-white text-xs rounded-lg disabled:opacity-50">
-                {todoSubmitting ? '추가 중...' : '추가'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 미완료 Todo 리스트 */}
-        {incompleteTodos.length === 0 && !showTodoForm ? (
-          <p className="text-xs text-gray-400 py-2">등록된 할일이 없습니다</p>
-        ) : (
-          <div className="space-y-1">
-            {incompleteTodos.map(todo => (
-              <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
-                <button
-                  onClick={() => handleToggleTodo(todo)}
-                  className="mt-0.5 w-4 h-4 rounded border border-gray-300 hover:border-primary-500 flex-shrink-0 flex items-center justify-center transition-colors"
-                  aria-label="할일 완료 토글"
-                />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm text-gray-800">{todo.title}</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {todo.endDate && (() => {
-                      const dday = getDaysRemaining(todo.endDate);
-                      return (
-                        <>
-                          <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
-                          <span className={`text-xs font-medium ${dday.color}`}>{dday.label}</span>
-                        </>
-                      );
-                    })()}
-                    {todo.linkedItem && (
-                      <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
-                        {todo.linkedItem.title}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button onClick={() => handleDeleteTodo(todo.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
-                  aria-label="할일 삭제">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 완료된 Todo */}
-        {completedTodos.length > 0 && (
-          <details className="mt-2">
-            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
-              완료됨 ({completedTodos.length})
-            </summary>
-            <div className="space-y-1 mt-1">
-              {completedTodos.map(todo => (
-                <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
-                  <button
-                    onClick={() => handleToggleTodo(todo)}
-                    className="mt-0.5 w-4 h-4 rounded border border-primary-400 bg-primary-500 flex-shrink-0 flex items-center justify-center"
-                    aria-label="할일 완료 해제"
-                  >
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                  </button>
-                  <span className="text-sm text-gray-400 line-through flex-1">{todo.title}</span>
-                  <button onClick={() => handleDeleteTodo(todo.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
-                    aria-label="할일 삭제">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
-
-      {/* ==================== 입력 창 ==================== */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
+      {/* 입력 창 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -445,60 +335,230 @@ export default function PersonalSpace() {
           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
         )}
       </div>
+    </>
+  );
 
-      {/* ==================== 개인 보고서 ==================== */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-500">나의 주간 보고서</h2>
-          <button onClick={handleGenerateReport} disabled={generating}
-            className="px-4 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-all">
-            {generating ? 'AI 생성 중...' : '보고서 생성'}
-          </button>
-        </div>
-        {generating && (
-          <div className="flex items-center gap-2 mb-3 text-sm text-primary-600">
-            <div className="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            AI가 보고서를 생성 중입니다...
-          </div>
-        )}
-        {reports.length > 0 ? (
-          (() => {
-            const latest = reports[0];
-            const older = reports.slice(1);
-            return (
+  return (
+    <div className="max-w-6xl mx-auto">
+      <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 관리</h1>
+
+      <DashboardGrid
+        top={topContent}
+        left={
+          <DashboardSection
+            title="할일"
+            count={incompleteTodos.length}
+            colorBar="green"
+            headerRight={
+              <div className="flex items-center gap-2">
+                {hasMoreTodos && (
+                  <button onClick={() => setShowAllTodos(!showAllTodos)}
+                    className="text-xs text-primary-600 hover:text-primary-700">
+                    {showAllTodos ? '접기' : `전체 보기 (${incompleteTodos.length})`}
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowTodoForm(!showTodoForm)}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  + 할일 추가
+                </button>
+              </div>
+            }
+          >
+            {/* Todo 추가 폼 */}
+            {showTodoForm && (
+              <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <input
+                  value={todoTitle}
+                  onChange={(e) => setTodoTitle(e.target.value)}
+                  placeholder="할일 제목"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg mb-2 focus:ring-1 focus:ring-primary-500"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddTodo(); }}
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={todoEndDate}
+                    onChange={(e) => setTodoEndDate(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+                    placeholder="마감일"
+                  />
+                  <div className="flex-1" />
+                  <button onClick={() => { setShowTodoForm(false); setTodoTitle(''); setTodoEndDate(''); }}
+                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">취소</button>
+                  <button onClick={handleAddTodo} disabled={!todoTitle.trim() || todoSubmitting}
+                    className="px-4 py-1.5 bg-primary-600 text-white text-xs rounded-lg disabled:opacity-50">
+                    {todoSubmitting ? '추가 중...' : '추가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 미완료 Todo 리스트 */}
+            {incompleteTodos.length === 0 && !showTodoForm ? (
+              <p className="text-xs text-gray-400 py-2">등록된 할일이 없습니다</p>
+            ) : (
+              <div className="space-y-1">
+                {visibleTodos.map(todo => (
+                  <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
+                    <button
+                      onClick={() => handleToggleTodo(todo)}
+                      className="mt-0.5 w-4 h-4 rounded border border-gray-300 hover:border-primary-500 flex-shrink-0 flex items-center justify-center transition-colors"
+                      aria-label="할일 완료 토글"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-gray-800">{todo.title}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {todo.endDate && (() => {
+                          const dday = getDaysRemaining(todo.endDate);
+                          return (
+                            <>
+                              <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
+                              <span className={`text-xs font-medium ${dday.color}`}>{dday.label}</span>
+                            </>
+                          );
+                        })()}
+                        {todo.linkedItem && (
+                          <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
+                            {todo.linkedItem.title}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => handleDeleteTodo(todo.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
+                      aria-label="할일 삭제">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 완료된 Todo */}
+            {completedTodos.length > 0 && (
+              <details className="mt-2">
+                <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                  완료됨 ({completedTodos.length})
+                </summary>
+                <div className="space-y-1 mt-1">
+                  {completedTodos.map(todo => (
+                    <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
+                      <button
+                        onClick={() => handleToggleTodo(todo)}
+                        className="mt-0.5 w-4 h-4 rounded border border-primary-400 bg-primary-500 flex-shrink-0 flex items-center justify-center"
+                        aria-label="할일 완료 해제"
+                      >
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                      </button>
+                      <span className="text-sm text-gray-400 line-through flex-1">{todo.title}</span>
+                      <button onClick={() => handleDeleteTodo(todo.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
+                        aria-label="할일 삭제">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </DashboardSection>
+        }
+        right={
+          <DashboardSection
+            title="업무 기록"
+            colorBar="green"
+            isEmpty={!loading && sortedDates.length === 0}
+            emptyText="아직 등록된 업무 기록이 없습니다. 위 입력 창에 업무 내용을 입력해 보세요."
+            headerRight={hasMoreDates ? (
+              <button onClick={() => setShowAllDates(!showAllDates)}
+                className="text-xs text-primary-600 hover:text-primary-700">
+                {showAllDates ? '접기' : `전체 보기 (${sortedDates.length}일)`}
+              </button>
+            ) : undefined}
+          >
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+              </div>
+            ) : (
+              visibleDates.map(dateKey => (
+                <div key={dateKey} className="mb-4 last:mb-0">
+                  <h3 className="text-xs font-semibold text-gray-500 mb-2">{dateKey}</h3>
+                  <div className="space-y-3">
+                    {groupedItems[dateKey]!.map(item => (
+                      <WorkLogBlock
+                        key={item.id}
+                        item={item}
+                        editable
+                        onUpdate={(data) => handleUpdate(item.id, data)}
+                        onDelete={() => handleDelete(item.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </DashboardSection>
+        }
+        bottom={
+          <DashboardSection
+            title="나의 주간 보고서"
+            colorBar="purple"
+            headerRight={
+              <button onClick={handleGenerateReport} disabled={generating}
+                className="px-4 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-all">
+                {generating ? 'AI 생성 중...' : '보고서 생성'}
+              </button>
+            }
+          >
+            {generating && (
+              <div className="flex items-center gap-2 mb-3 text-sm text-primary-600">
+                <div className="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                AI가 보고서를 생성 중입니다...
+              </div>
+            )}
+            {reports.length > 0 ? (
               <>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span onClick={() => navigate(`/report/${latest.id}`)}
+                <div className="bg-gray-50 rounded-lg border border-gray-100 p-3 mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span onClick={() => navigate(`/report/${latestReport.id}`)}
                       className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
-                      {getReportLabel(latest, 0)}
+                      {getReportLabel(latestReport, 0)}
                     </span>
                     <div className="flex gap-2">
-                      <button onClick={() => handleExportReport(latest.id, 'docx')}
+                      <button onClick={() => handleExportReport(latestReport.id, 'docx')}
                         className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
-                      <button onClick={() => handleExportReport(latest.id, 'xlsx')}
+                      <button onClick={() => handleExportReport(latestReport.id, 'xlsx')}
                         className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
-                      <button onClick={() => handleDeleteReport(latest.id)}
+                      <button onClick={() => handleDeleteReport(latestReport.id)}
                         className="text-xs px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100">삭제</button>
                     </div>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>생성: {new Date(latest.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
-                    <span>자동 삭제: {new Date(latest.expiresAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                    <span>생성: {new Date(latestReport.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                    <span>자동 삭제: {new Date(latestReport.expiresAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                   </div>
                 </div>
-                {older.length > 0 && (
+                {olderReports.length > 0 && (
                   <>
                     <button onClick={() => setShowOlderReports(!showOlderReports)}
                       className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
                       <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
-                      이전 보고서 ({older.length})
+                      이전 보고서 ({olderReports.length})
                     </button>
-                    {showOlderReports && older.map((report: any, idx: number) => (
-                      <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
-                        <div className="flex items-center justify-between mb-2">
+                    {showOlderReports && olderReports.map((report: any, idx: number) => (
+                      <div key={report.id} className="bg-gray-50 rounded-lg border border-gray-100 p-3 mb-2">
+                        <div className="flex items-center justify-between mb-1">
                           <span onClick={() => navigate(`/report/${report.id}`)}
                             className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
                             {getReportLabel(report, idx + 1)}
@@ -521,41 +581,12 @@ export default function PersonalSpace() {
                   </>
                 )}
               </>
-            );
-          })()
-        ) : (
-          <p className="text-xs text-gray-400">생성된 보고서가 없습니다. 버튼을 눌러 생성하세요.</p>
-        )}
-      </div>
-
-      {/* ==================== WorkLog 목록 ==================== */}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-        </div>
-      ) : sortedDates.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-lg mb-1">아직 등록된 업무 기록이 없습니다</p>
-          <p className="text-sm">위 입력 창에 업무 내용을 입력해 보세요</p>
-        </div>
-      ) : (
-        sortedDates.map(dateKey => (
-          <div key={dateKey} className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-500 mb-3 px-1">{dateKey}</h2>
-            <div className="space-y-3">
-              {groupedItems[dateKey]!.map(item => (
-                <WorkLogBlock
-                  key={item.id}
-                  item={item}
-                  editable
-                  onUpdate={(data) => handleUpdate(item.id, data)}
-                  onDelete={() => handleDelete(item.id)}
-                />
-              ))}
-            </div>
-          </div>
-        ))
-      )}
+            ) : (
+              <p className="text-xs text-gray-400">생성된 보고서가 없습니다. 버튼을 눌러 생성하세요.</p>
+            )}
+          </DashboardSection>
+        }
+      />
 
       <RatingPopup
         isOpen={showRating}

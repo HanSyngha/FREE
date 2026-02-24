@@ -29,6 +29,7 @@ interface GoalCardProps {
   };
   canEdit?: boolean;
   compact?: boolean;
+  defaultExpanded?: boolean;
   onUpdate?: () => void;
   /** 상위 목표 후보 목록 (매핑 변경용) */
   parentCandidates?: Array<{ id: string; title: string }>;
@@ -46,9 +47,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const STATUS_OPTIONS = ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] as const;
 
-export default function GoalCard({ goal, canEdit = false, compact = false, onUpdate, parentCandidates, unmappedChildren, childOrgNames }: GoalCardProps) {
+export default function GoalCard({ goal, canEdit = false, compact = false, defaultExpanded, onUpdate, parentCandidates, unmappedChildren, childOrgNames }: GoalCardProps) {
   const status = STATUS_LABELS[goal.status] || STATUS_LABELS.PLANNED;
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? true);
   const [editingSummary, setEditingSummary] = useState(false);
   const [summaryValue, setSummaryValue] = useState(goal.summary || '');
   const [progressValue, setProgressValue] = useState(goal.progress);
