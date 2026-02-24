@@ -17,6 +17,7 @@ interface GoalCardProps {
     itemTags?: Array<{ tag: { name: string } }>;
     tags?: string[];
     childItems?: Array<{ id: string; title: string; progress: number; status: string }>;
+    parentItem?: { id: string; title: string; level?: string } | null;
     _count?: { linkedWorkLogs: number; linkedTodos: number };
   };
   onClick?: () => void;
@@ -55,6 +56,9 @@ export default function GoalCard({ goal, onClick, compact = false }: GoalCardPro
       onClick={onClick}
       className={`bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
     >
+      {goal.parentItem && (
+        <p className="text-xs text-gray-400 mb-1">상위: {goal.parentItem.title}</p>
+      )}
       <div className="flex items-start justify-between mb-2">
         <h3 className="text-sm font-semibold text-gray-900 flex-1">{goal.title}</h3>
         <span className={`text-xs px-2 py-0.5 rounded-full ${status.color} ml-2 flex-shrink-0`}>

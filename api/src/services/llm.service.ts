@@ -226,7 +226,44 @@ export async function parseTextWithLLM(
 2. 다른 사람의 업무나 일반적인 공유 정보는 제외합니다
 3. 날짜를 특정할 수 없으면 workLogs는 ${defaultDate}를 사용합니다
 4. 기존 미완료 할일과 중복되는 항목은 todos에서 제외합니다
-5. 파트 목표가 있으면 관련 workLog/todo에 linkedItemId를 매핑합니다 (확실한 경우만)${partItemsStr}${existingTodosStr}${preferencesPrompt}
+5. 파트 목표가 있으면 관련 workLog/todo에 linkedItemId를 매핑합니다 (확실한 경우만)
+
+### linkedItemId 매핑 규칙
+- linkedItemId는 파트 목표 목록에 있는 **정확한 id 값**만 사용합니다
+- 업무/할일의 내용이 목표의 **핵심 활동과 직접 관련**될 때만 연결합니다
+- 간접적 관련(예: "회의 참석"은 모든 목표와 간접 관련)은 null로 설정합니다
+- 확신이 50% 미만이면 null로 설정합니다
+- 여러 목표와 관련될 수 있으면 가장 관련도 높은 하나만 선택합니다
+
+### 예제
+
+**파트 목표:**
+- id: "goal-a1", title: "CI/CD 파이프라인 구축"
+- id: "goal-a2", title: "API 성능 최적화"
+
+**기존 미완료 할일:**
+- "Jenkins 플러그인 조사"
+
+**입력:**
+"오늘 Jenkins 파이프라인에 Docker 빌드 스테이지를 추가하고 배포 자동화를 완성했다.
+그리고 API 응답 시간을 측정해봤는데 평균 800ms로 너무 느렸다. 내일 캐싱 레이어를 추가할 예정.
+팀 회의는 10시에 했고, 점심에 세미나 참석함."
+
+**올바른 출력:**
+{
+  "workLogs": [
+    { "title": "Jenkins Docker 빌드 스테이지 추가 및 배포 자동화", "content": "Jenkins 파이프라인에 Docker 빌드 스테이지를 추가하고 배포 자동화를 완성함", "date": "2026-02-24", "linkedItemId": "goal-a1" },
+    { "title": "API 응답 시간 측정", "content": "API 응답 시간을 측정한 결과 평균 800ms로 확인됨", "date": "2026-02-24", "linkedItemId": "goal-a2" },
+    { "title": "팀 회의 참석", "content": "10시 팀 회의 참석", "date": "2026-02-24", "linkedItemId": null },
+    { "title": "세미나 참석", "content": "점심 세미나 참석", "date": "2026-02-24", "linkedItemId": null }
+  ],
+  "todos": [
+    { "title": "API 캐싱 레이어 추가", "endDate": null, "linkedItemId": "goal-a2" }
+  ]
+}
+
+**주의:** "팀 회의", "세미나"는 특정 목표와 직접 관련 없으므로 linkedItemId: null.
+**주의:** "Jenkins 플러그인 조사"는 기존 할일이므로 todos에 포함하지 않음.${partItemsStr}${existingTodosStr}${preferencesPrompt}
 
 다음 JSON 형식으로 출력하세요:
 {
@@ -520,7 +557,41 @@ export async function parseGoalsWithLLM(
 3. 태그는 기존 태그를 우선 재사용하고, 필요시 새로 생성합니다
 4. 상위 목표가 있으면 가장 관련도 높은 상위 목표 title을 parentTitle에 매핑합니다
 5. status는 PLANNED/IN_PROGRESS/COMPLETED 중 하나 (기본: PLANNED)
-6. 날짜가 명시되지 않으면 null${existingItemsStr}${existingTagsStr}${parentItemsStr}
+6. 날짜가 명시되지 않으면 null
+
+### parentTitle 매핑 규칙
+- parentTitle은 상위 목표 목록에 있는 **정확한 title 문자열을 그대로 복사**합니다
+- 부분 일치나 의역은 허용되지 않습니다
+- 정확히 일치하는 상위 목표가 없으면 null
+
+### 태그 규칙
+- 기존 태그와 **의미가 같으면 반드시 기존 태그명을 재사용**합니다
+  예: 기존 "인프라" 태그가 있으면 → "인프라 구축", "Infrastructure" 대신 "인프라" 사용
+- 새 태그는 2~6글자, 한글 또는 영문, 핵심 키워드만
+
+### 예제
+
+**상위 목표:**
+- "서비스 안정성 확보"
+- "고객 만족도 향상"
+
+**기존 태그:** 인프라, 모니터링, CS
+
+**기존 목표:** "서버 이중화 구성" (중복 방지)
+
+**입력:**
+"1분기 목표: 서버 모니터링 시스템 구축하고 장애 대응 시간 30% 단축.
+고객 피드백 분석 시스템도 만들어야 함."
+
+**올바른 출력:**
+[
+  { "title": "서버 모니터링 시스템 구축", "content": "실시간 서버 상태를 추적하는 모니터링 시스템 구축", "status": "PLANNED", "startDate": null, "endDate": null, "tags": ["모니터링", "인프라"], "parentTitle": "서비스 안정성 확보" },
+  { "title": "장애 대응 시간 30% 단축", "content": "장애 발생 시 대응 프로세스를 개선하여 평균 대응 시간 30% 감소", "status": "PLANNED", "startDate": null, "endDate": null, "tags": ["인프라"], "parentTitle": "서비스 안정성 확보" },
+  { "title": "고객 피드백 분석 시스템", "content": "고객 피드백을 수집·분석하는 시스템 개발", "status": "PLANNED", "startDate": null, "endDate": null, "tags": ["CS"], "parentTitle": "고객 만족도 향상" }
+]
+
+**주의:** "서버 이중화 구성"은 기존 목표이므로 제외.
+**주의:** 태그 "모니터링", "인프라", "CS"는 기존 태그 재사용.${existingItemsStr}${existingTagsStr}${parentItemsStr}
 
 다음 JSON 배열 형식으로 출력하세요:
 [
@@ -575,7 +646,29 @@ ${partItems.map(i => `- id: "${i.id}", title: "${i.title}"`).join('\n')}
 
 ## 작업
 아래 할일이 위 목표 중 어떤 것과 가장 관련이 있는지 판단해 주세요.
-확실한 연결만 하세요. 관련 목표가 없으면 null을 반환합니다.
+
+## 연결 기준
+- 할일의 내용이 목표의 **핵심 활동과 직접적으로 관련**될 때만 연결
+- 간접적 관련성(예: "회의 참석"은 여러 목표와 관련될 수 있음)은 null
+- 확신이 70% 미만이면 null
+
+## 예제
+
+**파트 목표:**
+- id: "item-1", title: "프론트엔드 리팩토링"
+- id: "item-2", title: "API 문서 자동화"
+
+할일: "React 컴포넌트 코드 스플리팅 적용"
+→ { "linkedItemId": "item-1" }
+
+할일: "Swagger 자동 생성 스크립트 작성"
+→ { "linkedItemId": "item-2" }
+
+할일: "팀 회의 준비"
+→ { "linkedItemId": null }
+
+할일: "코드 리뷰 피드백 반영"
+→ { "linkedItemId": null }  (여러 목표에 해당 가능 → null)
 
 다음 JSON 형식으로 출력하세요:
 { "linkedItemId": "목표ID 또는 null" }
@@ -618,6 +711,23 @@ export async function updateItemProgress(
 
 ## 작업
 아래 하위 데이터(하위 목표/할일/업무기록)를 분석하여 이 목표의 진행률과 진척사항을 판단해 주세요.
+
+## 분석 기준
+- 하위 목표가 있으면: 하위 목표들의 상태 가중 평균 (COMPLETED=100, IN_PROGRESS=progress값, PLANNED=0)
+- 연결된 할일이 있으면: 완료된 할일 비율 참고
+- 연결된 업무 기록이 있으면: 활동 빈도를 정성적으로 반영
+- progress는 5 단위로 반올림 (0, 5, 10, ..., 95, 100)
+- summary는 구체적 수치 포함 (예: "하위 3개 중 1개 완료")
+
+## 예제
+
+**목표:** "CI/CD 파이프라인 구축", 설명: "빌드~배포 전체 자동화"
+
+**하위 데이터:**
+하위 목표 3개: "Jenkins 설정"(COMPLETED, 100%), "Docker 빌드"(IN_PROGRESS, 50%), "배포 스크립트"(PLANNED, 0%)
+연결 업무기록 5건, 연결 할일 3건(1건 완료)
+
+→ { "progress": 50, "summary": "하위 목표 3개 중 1개 완료, 1개 진행중. 할일 3건 중 1건 완료." }
 
 다음 JSON 형식으로 출력하세요:
 { "progress": 0~100, "summary": "진척사항 1-2문장" }
