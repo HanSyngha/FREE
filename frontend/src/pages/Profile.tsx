@@ -178,7 +178,7 @@ export default function Profile() {
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">사업부</p>
-            <p className="text-sm font-medium text-gray-900">{profile?.businessUnit || profile?.team?.businessUnit}</p>
+            <p className="text-sm font-medium text-gray-900">{profile?.businessUnit || profile?.team?.businessUnit?.name}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">팀</p>

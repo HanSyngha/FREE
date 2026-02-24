@@ -29,6 +29,7 @@ adminRoutes.get('/teams', authenticateToken, requireSuperAdmin, async (_req: Aut
   try {
     const teams = await prisma.team.findMany({
       include: {
+        businessUnit: true,
         groups: { include: { parts: true } },
         users: {
           select: {
