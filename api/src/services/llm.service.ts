@@ -460,7 +460,7 @@ export async function parseGoalsWithLLM(
     ? `\n\n## 상위 목표 (매핑 참조)\n${context.parentItems.map(p => `- "${p.title}"`).join('\n')}`
     : '';
 
-  const levelLabel = context.level === 'TEAM' ? '팀' : context.level === 'GROUP' ? '그룹' : '파트';
+  const levelLabel = context.level === 'BU' ? '사업부' : context.level === 'TEAM' ? '팀' : context.level === 'GROUP' ? '그룹' : '파트';
 
   const systemPrompt = `당신은 조직 목표 관리 도우미입니다.
 

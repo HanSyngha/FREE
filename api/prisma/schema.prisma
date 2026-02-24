@@ -36,21 +36,32 @@ model User {
   @@map("users")
 }
 
+model BusinessUnit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  teams     Team[]
+
+  @@map("business_units")
+}
+
 model Team {
-  id           String    @id @default(uuid())
-  name         String
-  businessUnit String
-  createdAt    DateTime  @default(now())
+  id             String       @id @default(uuid())
+  name           String
+  businessUnitId String
+  createdAt      DateTime     @default(now())
 
-  users        User[]
-  groups       Group[]
-  spaces       Space[]
-  teamAdmins   TeamAdmin[]
-  reportJobs   ReportJob[]
-  reportLogs   ReportLog[]
-  announcements Announcement[]
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  users          User[]
+  groups         Group[]
+  spaces         Space[]
+  teamAdmins     TeamAdmin[]
+  reportJobs     ReportJob[]
+  reportLogs     ReportLog[]
+  announcements  Announcement[]
 
-  @@unique([name, businessUnit])
+  @@unique([name, businessUnitId])
   @@map("teams")
 }
 
@@ -103,6 +114,7 @@ enum SpaceType {
   PART
   GROUP
   TEAM
+  BU
 }
 
 // 기존 Item -> WorkLog (업무 기록)
@@ -147,6 +159,7 @@ model Item {
   childItems   Item[]     @relation("ItemHierarchy")
   linkedWorkLogs WorkLog[]
   linkedTodos  Todo[]
+  orgWorkLogs  OrgWorkLog[]
 
   @@index([level, ownerId])
   @@index([parentItemId])
@@ -160,6 +173,7 @@ enum ItemStatus {
 }
 
 enum OrgLevel {
+  BU
   TEAM
   GROUP
   PART
@@ -227,6 +241,7 @@ enum ReportType {
   PART
   GROUP
   TEAM
+  BU
 }
 
 model ReportJob {
@@ -348,4 +363,22 @@ model ActivityLog {
 
   @@index([userId, createdAt])
   @@map("activity_logs")
+}
+
+model OrgWorkLog {
+  id        String   @id @default(uuid())
+  level     OrgLevel
+  ownerId   String
+  goalId    String
+  date      DateTime @db.Date
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  goal      Item     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([level, ownerId, goalId, date])
+  @@index([level, ownerId, date])
+  @@index([goalId, date])
+  @@map("org_work_logs")
 }

@@ -6,6 +6,8 @@ export interface User {
   username: string;
   deptname: string;
   businessUnit: string;
+  businessUnitId: string | null;
+  businessUnitName: string | null;
   teamId: string | null;
   groupId: string | null;
   partId: string | null;

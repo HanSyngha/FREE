@@ -142,7 +142,7 @@ authRoutes.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) 
     const user = await prisma.user.findUnique({
       where: { loginid: req.user.loginid },
       include: {
-        team: true,
+        team: { include: { businessUnit: true } },
         group: true,
         part: true,
         teamAdmins: { select: { teamId: true } },
@@ -166,6 +166,8 @@ authRoutes.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) 
         deptname: user.deptname, businessUnit: user.businessUnit,
         teamId: user.teamId, groupId: user.groupId, partId: user.partId,
         teamName: user.team?.name || null,
+        businessUnitId: user.team?.businessUnit?.id || null,
+        businessUnitName: user.team?.businessUnit?.name || null,
         groupName: user.group?.name || null,
         partName: user.part?.name || null,
         createdAt: user.createdAt, lastActive: user.lastActive,

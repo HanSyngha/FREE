@@ -15,7 +15,7 @@ export default function GoalInputForm({ level, ownerId, onCreated }: GoalInputFo
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const levelLabel = level === 'TEAM' ? '팀' : level === 'GROUP' ? '그룹' : '파트';
+  const levelLabel = level === 'BU' ? '사업부' : level === 'TEAM' ? '팀' : level === 'GROUP' ? '그룹' : '파트';
 
   const handleSubmit = async () => {
     if (!text.trim() || submitting) return;

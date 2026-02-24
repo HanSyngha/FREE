@@ -17,7 +17,7 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
     const { text, level, ownerId } = req.body;
 
     if (!text || typeof text !== 'string') { res.status(400).json({ error: '텍스트를 입력해 주세요.' }); return; }
-    if (!level || !['TEAM', 'GROUP', 'PART'].includes(level)) { res.status(400).json({ error: 'level은 TEAM/GROUP/PART 중 하나여야 합니다.' }); return; }
+    if (!level || !['BU', 'TEAM', 'GROUP', 'PART'].includes(level)) { res.status(400).json({ error: 'level은 BU/TEAM/GROUP/PART 중 하나여야 합니다.' }); return; }
     if (!ownerId) { res.status(400).json({ error: 'ownerId는 필수입니다.' }); return; }
 
     if (!user.teamId) { res.status(400).json({ error: '팀이 배정되지 않았습니다.' }); return; }
@@ -43,6 +43,14 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
       if (group) {
         parentItems = await prisma.item.findMany({
           where: { level: 'TEAM', ownerId: group.teamId },
+          select: { id: true, title: true },
+        });
+      }
+    } else if (level === 'TEAM') {
+      const team = await prisma.team.findUnique({ where: { id: ownerId }, select: { businessUnitId: true } });
+      if (team) {
+        parentItems = await prisma.item.findMany({
+          where: { level: 'BU', ownerId: team.businessUnitId },
           select: { id: true, title: true },
         });
       }
@@ -111,7 +119,13 @@ async function autoMapChildItems(
   let childLevel: string | null = null;
   let childOwnerIds: string[] = [];
 
-  if (level === 'TEAM') {
+  if (level === 'BU') {
+    childLevel = 'TEAM';
+    const item = await prisma.item.findUnique({ where: { id: created.id } });
+    if (!item) return;
+    const teams = await prisma.team.findMany({ where: { businessUnitId: item.ownerId }, select: { id: true } });
+    childOwnerIds = teams.map(t => t.id);
+  } else if (level === 'TEAM') {
     childLevel = 'GROUP';
     // 해당 팀의 모든 그룹
     const item = await prisma.item.findUnique({ where: { id: created.id } });

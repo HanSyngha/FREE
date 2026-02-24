@@ -17,6 +17,7 @@ import { ratingRoutes } from './routes/rating.routes.js';
 import { profileRoutes } from './routes/profile.routes.js';
 import { announcementRoutes } from './routes/announcement.routes.js';
 import { syncModelsFromEndpoint } from './services/llm.service.js';
+import { orgWorkLogRoutes } from './routes/orgWorkLog.routes.js';
 
 export const prisma = new PrismaClient();
 export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:15004');
@@ -51,6 +52,7 @@ app.use('/team-admin', teamAdminRoutes);
 app.use('/ratings', ratingRoutes);
 app.use('/profile', profileRoutes);
 app.use('/announcements', announcementRoutes);
+app.use('/org-worklogs', orgWorkLogRoutes);
 
 // Auto-initialize and validate LLM config on startup
 async function initLLMConfig() {

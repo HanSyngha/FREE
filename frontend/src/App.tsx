@@ -10,6 +10,7 @@ import PersonalSpaceOther from './pages/PersonalSpaceOther';
 import PartSpace from './pages/PartSpace';
 import GroupSpace from './pages/GroupSpace';
 import TeamSpace from './pages/TeamSpace';
+import BUSpace from './pages/BUSpace';
 import ReportDetail from './pages/ReportDetail';
 import Profile from './pages/Profile';
 import SuperAdmin from './pages/SuperAdmin';
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/space/part/:partId" element={<PartSpace />} />
         <Route path="/space/group/:groupId" element={<GroupSpace />} />
         <Route path="/space/team" element={<TeamSpace />} />
+        <Route path="/space/bu/:buId" element={<BUSpace />} />
         <Route path="/report/:id" element={<ReportDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/admin/super" element={<SuperAdmin />} />
