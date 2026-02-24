@@ -107,6 +107,7 @@ oauthRoutes.post('/exchange', async (req: Request, res: Response) => {
         username: dashUser.displayName,
         email: dashUser.email,
         profileImage: dashUser.profileImage,
+        dashboardToken,
       },
       create: {
         provider: dashUser.provider,
@@ -115,6 +116,7 @@ oauthRoutes.post('/exchange', async (req: Request, res: Response) => {
         email: dashUser.email,
         username: dashUser.displayName,
         profileImage: dashUser.profileImage,
+        dashboardToken,
         deptname: '',
         businessUnit: '',
       },

@@ -31,6 +31,12 @@ export async function fetchAvailableModels(
       .replace(/\/v1$/, '');
     const modelsUrl = `${baseUrl}/v1/models`;
 
+    // Dashboard JWT 조회
+    const user = await prisma.user.findFirst({
+      where: { loginid: userInfo.loginid },
+      select: { dashboardToken: true },
+    });
+
     const response = await fetch(modelsUrl, {
       headers: {
         'Content-Type': 'application/json',
@@ -38,6 +44,7 @@ export async function fetchAvailableModels(
         'X-User-Id': userInfo.loginid,
         'X-User-Name': encodeURIComponent(userInfo.username),
         'X-User-Dept': encodeURIComponent(userInfo.deptname),
+        ...(user?.dashboardToken && { Authorization: `Bearer ${user.dashboardToken}` }),
       },
     });
 
@@ -95,17 +102,25 @@ export async function callLLM(
     modelId = models[0]?.id || 'default';
   }
 
+  // Dashboard JWT 조회 (LLM Proxy 인증용)
+  const user = await prisma.user.findFirst({
+    where: { loginid: userInfo.loginid },
+    select: { dashboardToken: true },
+  });
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Service-Id': LLM_SERVICE_ID,
     'X-User-Id': userInfo.loginid,
     'X-User-Name': encodeURIComponent(userInfo.username),
     'X-User-Dept': encodeURIComponent(userInfo.deptname),
+    ...(user?.dashboardToken && { Authorization: `Bearer ${user.dashboardToken}` }),
   };
 
   console.log('[LLM] Request:', {
     url: LLM_PROXY_URL, model: modelId, operation: operation || 'default',
     serviceId: LLM_SERVICE_ID, userId: userInfo.loginid,
+    hasAuth: !!user?.dashboardToken,
   });
 
   const response = await fetch(LLM_PROXY_URL, {
