@@ -222,7 +222,7 @@ export default function TeamSpace() {
               <h2 className="text-sm font-semibold text-gray-500 mb-3">팀 목표</h2>
               <div className="space-y-3">
                 {goals.map((goal: any) => (
-                  <GoalCard key={goal.id} goal={goal} />
+                  <GoalCard key={goal.id} goal={goal} onClick={() => navigate(`/goals/${goal.id}`)} />
                 ))}
               </div>
             </div>

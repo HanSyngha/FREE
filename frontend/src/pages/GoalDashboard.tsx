@@ -2,12 +2,14 @@
  * GoalDashboard - 태그별 진행률 + Gantt 차트
  */
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { goalsApi } from '../services/api';
 import TagProgressView from '../components/chart/TagProgressView';
 import GanttChart from '../components/chart/GanttChart';
 import GoalCard from '../components/goal/GoalCard';
 
 export default function GoalDashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'tags' | 'gantt'>('tags');
   const [dashData, setDashData] = useState<any>(null);
   const [selectedTag, setSelectedTag] = useState<string>('');
@@ -96,7 +98,7 @@ export default function GoalDashboard() {
               </h2>
               <div className="space-y-3">
                 {filteredGoals.map((goal: any) => (
-                  <GoalCard key={goal.id} goal={goal} />
+                  <GoalCard key={goal.id} goal={goal} onClick={() => navigate(`/goals/${goal.id}`)} />
                 ))}
               </div>
             </div>

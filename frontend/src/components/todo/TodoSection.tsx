@@ -10,6 +10,7 @@ interface Todo {
   endDate: string;
   completed: boolean;
   linkedItemId?: string | null;
+  linkedItem?: { id: string; title: string } | null;
 }
 
 interface TodoSectionProps {
@@ -75,10 +76,19 @@ export default function TodoSection({ todos, onUpdate }: TodoSectionProps) {
             </div>
           ) : (
             <>
-              <span className="flex-1 text-sm text-gray-700 truncate">{todo.title}</span>
-              {todo.endDate && (
-                <span className="text-xs text-gray-400 flex-shrink-0">{todo.endDate.split('T')[0]}</span>
-              )}
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-gray-700 truncate block">{todo.title}</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {todo.endDate && (
+                    <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
+                  )}
+                  {todo.linkedItem && (
+                    <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
+                      {todo.linkedItem.title}
+                    </span>
+                  )}
+                </div>
+              </div>
               <button onClick={() => handleStartEdit(todo)}
                 className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-gray-600 transition-opacity">
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
