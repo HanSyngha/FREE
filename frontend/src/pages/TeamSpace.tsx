@@ -160,7 +160,7 @@ export default function TeamSpace() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-xl font-bold text-gray-900 mb-1">{data.team?.name}</h1>
-      <p className="text-sm text-gray-500 mb-4">{data.team?.businessUnit}</p>
+      <p className="text-sm text-gray-500 mb-4">{data.team?.businessUnit?.name}</p>
 
       {/* 공지 */}
       {data.announcement && !showAnnouncementForm && (
