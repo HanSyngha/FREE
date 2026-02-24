@@ -11,26 +11,44 @@ model User {
   id           String    @id @default(uuid())
   loginid      String    @unique
   username     String
-  deptname     String
-  businessUnit String
+  deptname     String    @default("")
+  businessUnit String    @default("")
   teamId       String?
   groupId      String?
   partId       String?
   requestCount Int       @default(0)
+  preferences  Json?
   createdAt    DateTime  @default(now())
   lastActive   DateTime  @default(now())
+
+  provider     String    @default("")
+  providerId   String    @default("")
+  email        String?
+  profileImage String?
 
   team         Team?     @relation(fields: [teamId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])
   part         Part?     @relation(fields: [partId], references: [id])
 
-  items        Item[]
+  workLogs     WorkLog[]
+  todos        Todo[]
   ratings      LLMRating[]
   teamAdmins   TeamAdmin[]
+  orgAdmins    OrgAdmin[]
   activityLogs ActivityLog[]
   announcements Announcement[]
 
+  @@unique([provider, providerId])
+  @@index([email])
   @@map("users")
+}
+
+model Admin {
+  id    String @id @default(uuid())
+  email String @unique
+  role  String @default("SUPER_ADMIN")
+
+  @@map("admins")
 }
 
 model Team {
@@ -42,6 +60,7 @@ model Team {
   users        User[]
   groups       Group[]
   spaces       Space[]
+  tags         Tag[]
   teamAdmins   TeamAdmin[]
   reportJobs   ReportJob[]
   reportLogs   ReportLog[]
@@ -87,7 +106,8 @@ model Space {
 
   team      Team?     @relation(fields: [teamId], references: [id])
 
-  items     Item[]
+  workLogs  WorkLog[]
+  todos     Todo[]
   reports   Report[]
 
   @@index([type, ownerId])
@@ -101,43 +121,147 @@ enum SpaceType {
   TEAM
 }
 
-model Item {
-  id        String   @id @default(uuid())
-  userId    String
-  spaceId   String
-  title     String
-  content   String
-  link      String?
-  date      DateTime @db.Date
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model WorkLog {
+  id           String   @id @default(uuid())
+  userId       String
+  spaceId      String
+  title        String
+  content      String
+  link         String?
+  date         DateTime @db.Date
+  linkedItemId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
-  space     Space    @relation(fields: [spaceId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+  space        Space    @relation(fields: [spaceId], references: [id])
+  linkedItem   Item?    @relation(fields: [linkedItemId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
   @@index([spaceId, date])
-  @@map("items")
+  @@map("work_logs")
+}
+
+model Item {
+  id           String     @id @default(uuid())
+  title        String
+  content      String     @default("")
+  status       ItemStatus @default(PLANNED)
+  startDate    DateTime?  @db.Date
+  endDate      DateTime?  @db.Date
+  progress     Int        @default(0)
+  summary      String?
+  level        OrgLevel
+  ownerId      String
+  parentItemId String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  parentItem   Item?      @relation("ItemHierarchy", fields: [parentItemId], references: [id], onDelete: SetNull)
+  childItems   Item[]     @relation("ItemHierarchy")
+  itemTags     ItemTag[]
+  linkedWorkLogs WorkLog[]
+  linkedTodos  Todo[]
+
+  @@index([level, ownerId])
+  @@index([parentItemId])
+  @@map("goals")
+}
+
+enum ItemStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum OrgLevel {
+  TEAM
+  GROUP
+  PART
+}
+
+model Todo {
+  id           String    @id @default(uuid())
+  userId       String
+  spaceId      String
+  title        String
+  content      String    @default("")
+  startDate    DateTime? @db.Date
+  endDate      DateTime? @db.Date
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  linkedItemId String?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User      @relation(fields: [userId], references: [id])
+  space        Space     @relation(fields: [spaceId], references: [id])
+  linkedItem   Item?     @relation(fields: [linkedItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completed])
+  @@index([spaceId])
+  @@map("todos")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  itemTags  ItemTag[]
+
+  @@unique([name, teamId])
+  @@map("tags")
+}
+
+model ItemTag {
+  id     String @id @default(uuid())
+  itemId String
+  tagId  String
+
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, tagId])
+  @@map("item_tags")
+}
+
+model OrgAdmin {
+  id        String   @id @default(uuid())
+  userId    String
+  level     OrgLevel
+  targetId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, level, targetId])
+  @@map("org_admins")
 }
 
 model Report {
-  id              String     @id @default(uuid())
-  spaceId         String
-  type            ReportType
-  byMemberContent String
-  byItemContent   String
-  periodStart     DateTime   @db.Date
-  periodEnd       DateTime   @db.Date
-  createdAt       DateTime   @default(now())
-  expiresAt       DateTime
+  id               String     @id @default(uuid())
+  spaceId          String
+  type             ReportType
+  byMemberContent  String
+  byItemContent    String
+  progressContent  String?
+  periodStart      DateTime   @db.Date
+  periodEnd        DateTime   @db.Date
+  createdAt        DateTime   @default(now())
+  expiresAt        DateTime
 
-  space           Space      @relation(fields: [spaceId], references: [id])
+  space            Space      @relation(fields: [spaceId], references: [id])
 
   @@index([spaceId, createdAt])
   @@map("reports")
 }
 
 enum ReportType {
+  PERSONAL
   PART
   GROUP
   TEAM

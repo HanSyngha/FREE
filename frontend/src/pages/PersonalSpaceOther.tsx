@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { spacesApi, itemsApi } from '../services/api';
-import ItemBlock from '../components/common/ItemBlock';
+import WorkLogBlock from '../components/common/ItemBlock';
 
 export default function PersonalSpaceOther() {
   const { userId, date } = useParams();
@@ -69,7 +69,7 @@ export default function PersonalSpaceOther() {
             <h2 className="text-sm font-semibold text-gray-500 mb-3">{dateKey}</h2>
             <div className="space-y-3">
               {groupedItems[dateKey].map((item: any) => (
-                <ItemBlock key={item.id} item={item} editable={false}
+                <WorkLogBlock key={item.id} item={item} editable={false}
                   deletable={isSuperAdmin}
                   onDelete={() => handleDelete(item.id)} />
               ))}

@@ -247,7 +247,7 @@ async function generatePartReportWorker(
   });
 
   const userIds = users.map(u => u.id);
-  const items = await prisma.item.findMany({
+  const workLogs = await prisma.workLog.findMany({
     where: {
       userId: { in: userIds },
       date: { gte: periodStart, lte: periodEnd },
@@ -256,21 +256,21 @@ async function generatePartReportWorker(
     orderBy: [{ date: 'desc' }],
   });
 
-  // items 데이터를 텍스트로 변환
+  // workLogs 데이터를 텍스트로 변환
   let itemsData = '';
-  if (items.length === 0) {
+  if (workLogs.length === 0) {
     itemsData = '';
   } else {
-    const byUser = new Map<string, typeof items>();
-    for (const item of items) {
-      const key = item.user.username;
+    const byUser = new Map<string, typeof workLogs>();
+    for (const wl of workLogs) {
+      const key = wl.user.username;
       if (!byUser.has(key)) byUser.set(key, []);
-      byUser.get(key)!.push(item);
+      byUser.get(key)!.push(wl);
     }
-    for (const [name, userItems] of byUser) {
+    for (const [name, userLogs] of byUser) {
       itemsData += `\n## ${name}\n`;
-      for (const item of userItems) {
-        itemsData += `- [${toKSTDateString(item.date)}] ${item.title}: ${item.content}\n`;
+      for (const wl of userLogs) {
+        itemsData += `- [${toKSTDateString(wl.date)}] ${wl.title}: ${wl.content}\n`;
       }
     }
   }
@@ -469,7 +469,7 @@ async function generateTeamReportWorker(
 async function cleanupExpiredData() {
   const now = new Date();
 
-  // Item(업무 기록)은 개인이 직접 삭제하기 전까지 영구 보관
+  // WorkLog(업무 기록)은 개인이 직접 삭제하기 전까지 영구 보관
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -528,14 +528,167 @@ async function cleanupExpiredData() {
   if (deletedGroups > 0) console.log(`[Cleanup] Deleted ${deletedGroups} empty groups`);
 }
 
+// ========== Progress Update ==========
+async function updateProgressForTeam(teamId: string) {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: { groups: { include: { parts: true } } },
+  });
+  if (!team) return;
+
+  // Phase 1: 파트 Item → linkedTodos/WorkLogs 기반
+  for (const group of team.groups) {
+    for (const part of group.parts) {
+      const partItems = await prisma.item.findMany({
+        where: { level: 'PART', ownerId: part.id, status: { not: 'COMPLETED' } },
+      });
+      for (const item of partItems) {
+        try {
+          const todos = await prisma.todo.findMany({
+            where: { linkedItemId: item.id },
+            select: { title: true, completed: true },
+          });
+          const workLogs = await prisma.workLog.findMany({
+            where: { linkedItemId: item.id },
+            select: { title: true, date: true },
+            orderBy: { date: 'desc' },
+            take: 20,
+          });
+          if (todos.length === 0 && workLogs.length === 0) continue;
+
+          let childData = '';
+          if (todos.length > 0) {
+            childData += `## 연결된 할일\n${todos.map(t => `- [${t.completed ? '완료' : '미완료'}] ${t.title}`).join('\n')}\n`;
+          }
+          if (workLogs.length > 0) {
+            childData += `## 연결된 업무기록\n${workLogs.map(w => `- [${toKSTDateString(w.date)}] ${w.title}`).join('\n')}\n`;
+          }
+
+          const result = await callProgressLLM(item, childData);
+          await prisma.item.update({
+            where: { id: item.id },
+            data: { progress: result.progress, summary: result.summary },
+          });
+        } catch (e) {
+          console.error(`[Progress] Part item ${item.id} failed:`, e);
+        }
+      }
+    }
+  }
+
+  // Phase 2: 그룹 Item → 하위 파트 Item 기반
+  for (const group of team.groups) {
+    const groupItems = await prisma.item.findMany({
+      where: { level: 'GROUP', ownerId: group.id, status: { not: 'COMPLETED' } },
+    });
+    for (const item of groupItems) {
+      try {
+        const childItems = await prisma.item.findMany({
+          where: { parentItemId: item.id },
+          select: { title: true, progress: true, status: true },
+        });
+        if (childItems.length === 0) continue;
+
+        const childData = `## 하위 목표\n${childItems.map(c => `- [${c.status}, ${c.progress}%] ${c.title}`).join('\n')}`;
+        const result = await callProgressLLM(item, childData);
+        await prisma.item.update({
+          where: { id: item.id },
+          data: { progress: result.progress, summary: result.summary },
+        });
+      } catch (e) {
+        console.error(`[Progress] Group item ${item.id} failed:`, e);
+      }
+    }
+  }
+
+  // Phase 3: 팀 Item → 하위 그룹 Item 기반
+  const teamItems = await prisma.item.findMany({
+    where: { level: 'TEAM', ownerId: teamId, status: { not: 'COMPLETED' } },
+  });
+  for (const item of teamItems) {
+    try {
+      const childItems = await prisma.item.findMany({
+        where: { parentItemId: item.id },
+        select: { title: true, progress: true, status: true },
+      });
+      if (childItems.length === 0) continue;
+
+      const childData = `## 하위 목표\n${childItems.map(c => `- [${c.status}, ${c.progress}%] ${c.title}`).join('\n')}`;
+      const result = await callProgressLLM(item, childData);
+      await prisma.item.update({
+        where: { id: item.id },
+        data: { progress: result.progress, summary: result.summary },
+      });
+    } catch (e) {
+      console.error(`[Progress] Team item ${item.id} failed:`, e);
+    }
+  }
+
+  console.log(`[Progress] Updated progress for team ${team.name}`);
+}
+
+async function callProgressLLM(
+  item: { id: string; title: string; content: string },
+  childData: string
+): Promise<{ progress: number; summary: string }> {
+  const systemPrompt = `당신은 목표 진행률 분석 도우미입니다.
+
+## 목표
+- 제목: ${item.title}
+- 설명: ${item.content}
+
+## 작업
+아래 하위 데이터를 분석하여 이 목표의 진행률과 진척사항을 판단해 주세요.
+
+다음 JSON 형식으로 출력하세요:
+{ "progress": 0~100, "summary": "진척사항 1-2문장" }
+
+반드시 유효한 JSON만 출력하세요.`;
+
+  const result = await callWithRetry([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: childData },
+  ]);
+
+  const jsonMatch = result.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { progress: 0, summary: '' };
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  return {
+    progress: Math.max(0, Math.min(100, Number(parsed.progress) || 0)),
+    summary: String(parsed.summary || ''),
+  };
+}
+
 // ========== BullMQ Workers ==========
 const cleanupWorker = new Worker('cleanup', async () => {
   await cleanupExpiredData();
 }, { connection });
 
+// progress-update Worker
+const progressWorker = new Worker('progress-update', async (job) => {
+  if (job.data.type === 'scheduled') {
+    const teams = await prisma.team.findMany();
+    for (const team of teams) {
+      try {
+        await updateProgressForTeam(team.id);
+      } catch (e) {
+        console.error(`[Progress] Team ${team.name} failed:`, e);
+      }
+    }
+  } else if (job.data.teamId) {
+    await updateProgressForTeam(job.data.teamId);
+  }
+}, { connection, concurrency: 1 });
+
+progressWorker.on('failed', (job, err) => {
+  console.error(`[Progress] Job ${job?.id} failed:`, err.message);
+});
+
 // ========== Scheduled Jobs ==========
 const reportQueue = new Queue('report-generation', { connection });
 const cleanupQueue = new Queue('cleanup', { connection });
+const progressQueue = new Queue('progress-update', { connection });
 
 async function setupScheduledJobs() {
   // 매일 0시 - 보고서 생성 (팀별 병렬)
@@ -554,6 +707,15 @@ async function setupScheduledJobs() {
   }, {
     name: 'daily-cleanup',
     data: {},
+  });
+
+  // 매일 1시 30분 - 목표 진행률 업데이트 (보고서 후)
+  await progressQueue.upsertJobScheduler('daily-progress', {
+    pattern: '30 1 * * *', // 매일 1시 30분
+    tz: 'Asia/Seoul',
+  }, {
+    name: 'daily-progress',
+    data: { type: 'scheduled' },
   });
 
   console.log('[Worker] Scheduled jobs configured');
@@ -594,6 +756,7 @@ start().catch(console.error);
 process.on('SIGTERM', async () => {
   await reportWorker.close();
   await cleanupWorker.close();
+  await progressWorker.close();
   await prisma.$disconnect();
   process.exit(0);
 });

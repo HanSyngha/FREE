@@ -1,11 +1,11 @@
 /**
- * Personal Space Page - 개인 Space
+ * Personal Space Page - 개인 Space (Todo + WorkLog 통합)
  */
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { spacesApi, itemsApi, ratingApi, reportsApi, profileApi } from '../services/api';
-import ItemBlock from '../components/common/ItemBlock';
+import { spacesApi, workLogsApi, todosApi, ratingApi, reportsApi, profileApi } from '../services/api';
+import WorkLogBlock from '../components/common/ItemBlock';
 import RatingPopup from '../components/common/RatingPopup';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -15,7 +15,6 @@ function formatDateWithDay(iso: string) {
   return `${dateStr}(${DAYS[d.getDay()]})`;
 }
 
-/** KST 기준 YYYY-MM-DD */
 function getKSTToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
@@ -23,7 +22,7 @@ function toKSTDateString(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
 
-interface Item {
+interface WorkLog {
   id: string;
   title: string;
   content: string;
@@ -31,6 +30,19 @@ interface Item {
   date: string;
   createdAt: string;
   updatedAt: string;
+  linkedItem?: { id: string; title: string } | null;
+}
+
+interface Todo {
+  id: string;
+  title: string;
+  content: string;
+  startDate: string | null;
+  endDate: string | null;
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  linkedItem?: { id: string; title: string } | null;
 }
 
 interface Preferences {
@@ -43,7 +55,8 @@ interface Preferences {
 export default function PersonalSpace() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [items, setItems] = useState<Item[]>([]);
+  const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [date, setDate] = useState(getKSTToday());
@@ -55,11 +68,18 @@ export default function PersonalSpace() {
   const [showOlderReports, setShowOlderReports] = useState(false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
-  const fetchItems = async () => {
+  // Todo 직접 추가
+  const [showTodoForm, setShowTodoForm] = useState(false);
+  const [todoTitle, setTodoTitle] = useState('');
+  const [todoEndDate, setTodoEndDate] = useState('');
+  const [todoSubmitting, setTodoSubmitting] = useState(false);
+
+  const fetchData = async () => {
     setLoading(true);
     try {
       const res = await spacesApi.getPersonal();
-      setItems(res.data.items);
+      setWorkLogs(res.data.workLogs || res.data.items || []);
+      setTodos(res.data.todos || []);
       setReports(res.data.reports || []);
     } catch { } finally {
       setLoading(false);
@@ -67,7 +87,7 @@ export default function PersonalSpace() {
   };
 
   useEffect(() => {
-    fetchItems();
+    fetchData();
     profileApi.getPreferences().then(res => setPreferences(res.data.preferences || {})).catch(() => {});
   }, []);
 
@@ -76,13 +96,10 @@ export default function PersonalSpace() {
     setSubmitting(true);
     setError('');
     try {
-      const res = await itemsApi.create(text, date);
+      const res = await workLogsApi.create(text, date);
       setText('');
-      await fetchItems();
-      // Rating 체크
-      if (res.data.shouldRate) {
-        setShowRating(true);
-      }
+      await fetchData();
+      if (res.data.shouldRate) setShowRating(true);
     } catch (err: any) {
       setError(err.response?.data?.error || '정리에 실패했습니다. 다시 시도해 주세요.');
     } finally {
@@ -92,17 +109,52 @@ export default function PersonalSpace() {
 
   const handleUpdate = async (id: string, data: { title?: string; content?: string; link?: string; date?: string }) => {
     try {
-      await itemsApi.update(id, data);
-      await fetchItems();
+      await workLogsApi.update(id, data);
+      await fetchData();
     } catch { }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return;
     try {
-      await itemsApi.delete(id);
-      await fetchItems();
+      await workLogsApi.delete(id);
+      await fetchData();
     } catch { }
+  };
+
+  // Todo handlers
+  const handleToggleTodo = async (todo: Todo) => {
+    try {
+      await todosApi.update(todo.id, { completed: !todo.completed });
+      await fetchData();
+    } catch { }
+  };
+
+  const handleDeleteTodo = async (id: string) => {
+    if (!confirm('이 할일을 삭제하시겠습니까?')) return;
+    try {
+      await todosApi.delete(id);
+      await fetchData();
+    } catch { }
+  };
+
+  const handleAddTodo = async () => {
+    if (!todoTitle.trim() || todoSubmitting) return;
+    setTodoSubmitting(true);
+    try {
+      await todosApi.create({
+        title: todoTitle,
+        endDate: todoEndDate || undefined,
+      });
+      setTodoTitle('');
+      setTodoEndDate('');
+      setShowTodoForm(false);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || '할일 추가에 실패했습니다.');
+    } finally {
+      setTodoSubmitting(false);
+    }
   };
 
   const handleGenerateReport = async () => {
@@ -110,7 +162,7 @@ export default function PersonalSpace() {
     setGenerating(true);
     try {
       await reportsApi.generatePersonal();
-      await fetchItems();
+      await fetchData();
     } catch (err: any) {
       alert(err.response?.data?.error || '보고서 생성에 실패했습니다.');
     } finally {
@@ -134,13 +186,12 @@ export default function PersonalSpace() {
     if (!confirm('이 보고서를 삭제하시겠습니까?')) return;
     try {
       await reportsApi.delete(reportId);
-      await fetchItems();
+      await fetchData();
     } catch (err: any) {
       alert(err.response?.data?.error || '삭제에 실패했습니다.');
     }
   };
 
-  // 보고서 제목에 중복 번호 매기기
   const getReportLabel = (report: any, idx: number) => {
     const periodLabel = `${formatDateWithDay(report.periodStart)} ~ ${formatDateWithDay(report.periodEnd)}`;
     const sameperiod = reports.filter((r: any) =>
@@ -154,23 +205,25 @@ export default function PersonalSpace() {
     return `${user?.username} 보고서 ${periodLabel}`;
   };
 
-  // 날짜별 그룹핑
-  const groupedItems = items.reduce((acc, item) => {
+  // 날짜별 그룹핑 (WorkLog)
+  const groupedItems = workLogs.reduce((acc, item) => {
     const d = item.date.split('T')[0]!;
     if (!acc[d]) acc[d] = [];
     acc[d]!.push(item);
     return acc;
-  }, {} as Record<string, Item[]>);
+  }, {} as Record<string, WorkLog[]>);
 
   const sortedDates = Object.keys(groupedItems).sort((a, b) => b.localeCompare(a));
 
-  // 날짜 범위 (오늘 ~ 29일 전, KST 기준)
   const today = getKSTToday();
   const minDate = new Date();
   minDate.setDate(minDate.getDate() - 29);
   const minDateStr = toKSTDateString(minDate);
 
-  // 설정 요약 텍스트 생성
+  // Todo 분류
+  const incompleteTodos = todos.filter(t => !t.completed);
+  const completedTodos = todos.filter(t => t.completed);
+
   const getPreferencesSummary = () => {
     if (!preferences) return null;
     const parts: string[] = [];
@@ -189,7 +242,7 @@ export default function PersonalSpace() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 기록</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-4">나의 업무 관리</h1>
 
       {/* 설정 안내 배너 */}
       <div className={`rounded-lg p-3 mb-4 flex items-center justify-between ${hasPreferences ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 border border-gray-200'}`}>
@@ -211,12 +264,128 @@ export default function PersonalSpace() {
         </Link>
       </div>
 
-      {/* 입력 창 */}
+      {/* ==================== Todo 섹션 ==================== */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg className="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            할일 ({incompleteTodos.length})
+          </h2>
+          <button
+            onClick={() => setShowTodoForm(!showTodoForm)}
+            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+          >
+            + 할일 추가
+          </button>
+        </div>
+
+        {/* Todo 추가 폼 */}
+        {showTodoForm && (
+          <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+            <input
+              value={todoTitle}
+              onChange={(e) => setTodoTitle(e.target.value)}
+              placeholder="할일 제목"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg mb-2 focus:ring-1 focus:ring-primary-500"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddTodo(); }}
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={todoEndDate}
+                onChange={(e) => setTodoEndDate(e.target.value)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+                placeholder="마감일"
+              />
+              <div className="flex-1" />
+              <button onClick={() => { setShowTodoForm(false); setTodoTitle(''); setTodoEndDate(''); }}
+                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">취소</button>
+              <button onClick={handleAddTodo} disabled={!todoTitle.trim() || todoSubmitting}
+                className="px-4 py-1.5 bg-primary-600 text-white text-xs rounded-lg disabled:opacity-50">
+                {todoSubmitting ? '추가 중...' : '추가'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 미완료 Todo 리스트 */}
+        {incompleteTodos.length === 0 && !showTodoForm ? (
+          <p className="text-xs text-gray-400 py-2">등록된 할일이 없습니다</p>
+        ) : (
+          <div className="space-y-1">
+            {incompleteTodos.map(todo => (
+              <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
+                <button
+                  onClick={() => handleToggleTodo(todo)}
+                  className="mt-0.5 w-4 h-4 rounded border border-gray-300 hover:border-primary-500 flex-shrink-0 flex items-center justify-center transition-colors"
+                  aria-label="할일 완료 토글"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-gray-800">{todo.title}</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {todo.endDate && (
+                      <span className="text-xs text-gray-400">{todo.endDate.split('T')[0]}</span>
+                    )}
+                    {todo.linkedItem && (
+                      <span className="text-xs text-primary-500 bg-primary-50 px-1.5 py-0.5 rounded">
+                        {todo.linkedItem.title}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => handleDeleteTodo(todo.id)}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
+                  aria-label="할일 삭제">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 완료된 Todo */}
+        {completedTodos.length > 0 && (
+          <details className="mt-2">
+            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+              완료됨 ({completedTodos.length})
+            </summary>
+            <div className="space-y-1 mt-1">
+              {completedTodos.map(todo => (
+                <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
+                  <button
+                    onClick={() => handleToggleTodo(todo)}
+                    className="mt-0.5 w-4 h-4 rounded border border-primary-400 bg-primary-500 flex-shrink-0 flex items-center justify-center"
+                    aria-label="할일 완료 해제"
+                  >
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  </button>
+                  <span className="text-sm text-gray-400 line-through flex-1">{todo.title}</span>
+                  <button onClick={() => handleDeleteTodo(todo.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-opacity"
+                    aria-label="할일 삭제">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+
+      {/* ==================== 입력 창 ==================== */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Jira 이슈, 채팅 내역, 메일 본문, 회의록, 메모... 무엇이든 붙여넣으세요. AI가 자동으로 정리합니다."
+          placeholder="Jira 이슈, 채팅 내역, 메일 본문, 회의록, 메모... 무엇이든 붙여넣으세요. AI가 업무 기록과 할일을 자동으로 분리합니다."
           disabled={submitting}
           maxLength={50000}
           aria-label="업무 내용 입력"
@@ -247,11 +416,10 @@ export default function PersonalSpace() {
           </button>
         </div>
 
-        {/* 처리 중 스피너 */}
         {submitting && (
           <div className="flex items-center gap-2 mt-3 text-sm text-primary-600">
             <div className="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            AI가 정리 중입니다...
+            AI가 업무 기록과 할일을 분리하고 있습니다...
           </div>
         )}
 
@@ -260,7 +428,7 @@ export default function PersonalSpace() {
         )}
       </div>
 
-      {/* 개인 보고서 */}
+      {/* ==================== 개인 보고서 ==================== */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-500">나의 주간 보고서</h2>
@@ -342,14 +510,14 @@ export default function PersonalSpace() {
         )}
       </div>
 
-      {/* Item 목록 */}
+      {/* ==================== WorkLog 목록 ==================== */}
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
         </div>
       ) : sortedDates.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-lg mb-1">아직 등록된 항목이 없습니다</p>
+          <p className="text-lg mb-1">아직 등록된 업무 기록이 없습니다</p>
           <p className="text-sm">위 입력 창에 업무 내용을 입력해 보세요</p>
         </div>
       ) : (
@@ -358,7 +526,7 @@ export default function PersonalSpace() {
             <h2 className="text-sm font-semibold text-gray-500 mb-3 px-1">{dateKey}</h2>
             <div className="space-y-3">
               {groupedItems[dateKey]!.map(item => (
-                <ItemBlock
+                <WorkLogBlock
                   key={item.id}
                   item={item}
                   editable
@@ -371,7 +539,6 @@ export default function PersonalSpace() {
         ))
       )}
 
-      {/* Rating Popup */}
       <RatingPopup
         isOpen={showRating}
         onClose={() => setShowRating(false)}
