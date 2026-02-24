@@ -58,7 +58,6 @@ export default function GroupSpace() {
       }
 
       // 조직도
-      const teamId = spaceRes.data.group?.teamId;
       if (teamId) {
         try { const treeRes = await orgApi.getTree(teamId); setOrgTree(treeRes.data.tree); } catch {}
       }
