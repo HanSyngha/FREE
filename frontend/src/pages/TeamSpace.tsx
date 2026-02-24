@@ -1,5 +1,5 @@
 /**
- * Team Space Page - 팀 목표 + 하위 그룹 진행률 (단일 페이지)
+ * Team Space Page - 팀 목표 + 하위 그룹 진행률 (2컬럼 대시보드)
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,8 @@ import { spacesApi, reportsApi, announcementsApi, goalsApi, adminApi } from '../
 import GoalCard from '../components/goal/GoalCard';
 import GoalInputForm from '../components/goal/GoalInputForm';
 import ProgressBar from '../components/common/ProgressBar';
+import DashboardGrid from '../components/spaces/DashboardGrid';
+import DashboardSection from '../components/spaces/DashboardSection';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function formatDateWithDay(iso: string) {
@@ -25,6 +27,8 @@ export default function TeamSpace() {
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
   const [showOlderReports, setShowOlderReports] = useState(false);
+  const [showAllGoals, setShowAllGoals] = useState(false);
+  const [showAllDates, setShowAllDates] = useState(false);
 
   // Announcement
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
@@ -37,6 +41,9 @@ export default function TeamSpace() {
   const [triggeringProgress, setTriggeringProgress] = useState(false);
   const [triggerMsg, setTriggerMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [buGoals, setBuGoals] = useState<Array<{ id: string; title: string }>>([]);
+
+  const GOAL_LIMIT = 5;
+  const DATE_LIMIT = 2;
 
   const isTeamLevel = isSuperAdmin || isTeamAdmin;
 
@@ -165,14 +172,21 @@ export default function TeamSpace() {
   });
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
 
-  return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.team?.name}</h1>
-      <p className="text-sm text-gray-500 mb-4">{data.team?.businessUnit?.name}</p>
+  const visibleGoals = showAllGoals ? goals : goals.slice(0, GOAL_LIMIT);
+  const hasMoreGoals = goals.length > GOAL_LIMIT;
+  const visibleDates = showAllDates ? sortedDates : sortedDates.slice(0, DATE_LIMIT);
+  const hasMoreDates = sortedDates.length > DATE_LIMIT;
 
+  const reports = data.reports || [];
+  const latestReport = reports[0];
+  const olderReports = reports.slice(1);
+
+  // 상단 영역: 공지 + 관리패널 + 목표입력 + 실패보고서
+  const topContent = (
+    <>
       {/* 공지 */}
       {data.announcement && !showAnnouncementForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-sm font-bold text-blue-800 mb-1">{data.announcement.title}</h3>
@@ -192,7 +206,7 @@ export default function TeamSpace() {
       )}
 
       {isTeamLevel && showAnnouncementForm && (
-        <div className="bg-white border border-blue-200 rounded-xl p-4 mb-4">
+        <div className="bg-white border border-blue-200 rounded-xl p-4">
           <h3 className="text-sm font-bold text-gray-700 mb-3">{data.announcement ? '공지 수정' : '새 공지 작성'}</h3>
           <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)}
             placeholder="공지 제목" className="w-full px-3 py-2 border rounded-lg text-sm mb-2" />
@@ -211,13 +225,12 @@ export default function TeamSpace() {
 
       {isTeamLevel && !data.announcement && !showAnnouncementForm && (
         <button onClick={() => { setAnnTitle(''); setAnnContent(''); setShowAnnouncementForm(true); }}
-          className="mb-4 text-sm text-primary-600 hover:underline">+ 팀 공지 작성</button>
+          className="text-sm text-primary-600 hover:underline">+ 팀 공지 작성</button>
       )}
 
-      {/* 관리 패널 (TeamAdmin/SuperAdmin) */}
+      {/* 관리 패널 */}
       {isTeamLevel && (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">관리 패널</h3>
+        <DashboardSection title="관리 패널" colorBar="orange">
           <div className="flex flex-wrap gap-2">
             <button onClick={handleTriggerReport} disabled={triggeringReport}
               className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors">
@@ -233,12 +246,12 @@ export default function TeamSpace() {
               triggerMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
             }`}>{triggerMsg.text}</div>
           )}
-        </div>
+        </DashboardSection>
       )}
 
       {/* 실패한 보고서 재개 */}
       {data.failedJob && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-red-800">보고서 생성이 실패했습니다</p>
@@ -256,136 +269,163 @@ export default function TeamSpace() {
       {isTeamLevel && data.team?.id && (
         <GoalInputForm level="TEAM" ownerId={data.team.id} onCreated={fetchData} />
       )}
+    </>
+  );
 
-      {/* 팀 목표 */}
-      {goals.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">팀 목표 ({goals.length})</h2>
-          <div className="space-y-3">
-            {goals.map((goal: any) => (
-              <GoalCard key={goal.id} goal={goal} canEdit={isTeamLevel} onUpdate={fetchData} parentCandidates={buGoals} />
-            ))}
-          </div>
-        </div>
-      )}
+  return (
+    <div className="max-w-6xl mx-auto">
+      <h1 className="text-xl font-bold text-gray-900 mb-1">{data.team?.name}</h1>
+      <p className="text-sm text-gray-500 mb-4">{data.team?.businessUnit?.name}</p>
 
-      {/* 하위 그룹별 목표 진행률 */}
-      <div className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">그룹별 목표</h2>
-        {(data.team?.groups || []).map((group: any) => {
-          const gGoals = groupGoals[group.id] || [];
-          const avgProgress = gGoals.length > 0
-            ? Math.round(gGoals.reduce((s: number, g: any) => s + g.progress, 0) / gGoals.length)
-            : 0;
-          return (
-            <div key={group.id}
-              className="bg-white rounded-xl border border-gray-200 p-4 mb-3 cursor-pointer hover:shadow-sm transition-shadow"
-              onClick={() => navigate(`/space/group/${group.id}`)}
+      <DashboardGrid
+        top={topContent}
+        left={
+          <>
+            <DashboardSection
+              title="팀 목표"
+              count={goals.length}
+              colorBar="blue"
+              isEmpty={goals.length === 0}
+              emptyText="등록된 목표가 없습니다"
+              headerRight={hasMoreGoals ? (
+                <button onClick={() => setShowAllGoals(!showAllGoals)}
+                  className="text-xs text-primary-600 hover:text-primary-700">
+                  {showAllGoals ? '접기' : `전체 보기 (${goals.length})`}
+                </button>
+              ) : undefined}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-800">{group.name}</span>
-                <span className="text-xs text-gray-400">{gGoals.length}개 목표</span>
+              <div className="space-y-3">
+                {visibleGoals.map((goal: any) => (
+                  <GoalCard key={goal.id} goal={goal} canEdit={isTeamLevel} defaultExpanded={false}
+                    onUpdate={fetchData} parentCandidates={buGoals} />
+                ))}
               </div>
-              <ProgressBar progress={avgProgress} size="md" />
-              {gGoals.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {gGoals.slice(0, 3).map((g: any) => (
-                    <GoalCard key={g.id} goal={g} compact />
-                  ))}
-                  {gGoals.length > 3 && (
-                    <p className="text-xs text-gray-400 px-1">+{gGoals.length - 3}개 더</p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            </DashboardSection>
 
-      {/* 보고서 */}
-      {data.reports?.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">주간 보고서</h2>
-          {(() => {
-            const latest = data.reports[0];
-            const older = data.reports.slice(1);
-            return (
-              <>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span onClick={() => navigate(`/report/${latest.id}`)}
-                      className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
-                      {data.team?.name} 보고서 {formatDateWithDay(latest.periodStart)} ~ {formatDateWithDay(latest.periodEnd)}
-                    </span>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleExport(latest.id, 'docx')}
-                        className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
-                      <button onClick={() => handleExport(latest.id, 'xlsx')}
-                        className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
+            {/* 그룹별 목표 */}
+            <DashboardSection
+              title="그룹별 목표"
+              count={(data.team?.groups || []).length}
+              colorBar="blue"
+              isEmpty={(data.team?.groups || []).length === 0}
+              emptyText="하위 그룹이 없습니다"
+            >
+              <div className="space-y-3">
+                {(data.team?.groups || []).map((group: any) => {
+                  const gGoals = groupGoals[group.id] || [];
+                  const avgProgress = gGoals.length > 0
+                    ? Math.round(gGoals.reduce((s: number, g: any) => s + g.progress, 0) / gGoals.length)
+                    : 0;
+                  return (
+                    <div key={group.id}
+                      className="bg-gray-50 rounded-lg border border-gray-100 p-3 cursor-pointer hover:shadow-sm transition-shadow"
+                      onClick={() => navigate(`/space/group/${group.id}`)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-800">{group.name}</span>
+                        <span className="text-xs text-gray-400">{gGoals.length}개 목표</span>
+                      </div>
+                      <ProgressBar progress={avgProgress} size="md" />
+                      {gGoals.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {gGoals.slice(0, 3).map((g: any) => (
+                            <GoalCard key={g.id} goal={g} compact />
+                          ))}
+                          {gGoals.length > 3 && (
+                            <p className="text-xs text-gray-400 px-1">+{gGoals.length - 3}개 더</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </DashboardSection>
+          </>
+        }
+        right={
+          <DashboardSection
+            title="업무 기록"
+            colorBar="green"
+            isEmpty={sortedDates.length === 0}
+            emptyText="등록된 업무 기록이 없습니다"
+            headerRight={hasMoreDates ? (
+              <button onClick={() => setShowAllDates(!showAllDates)}
+                className="text-xs text-primary-600 hover:text-primary-700">
+                {showAllDates ? '접기' : `전체 보기 (${sortedDates.length}일)`}
+              </button>
+            ) : undefined}
+          >
+            {visibleDates.map(dateKey => (
+              <div key={dateKey} className="mb-4 last:mb-0">
+                <h3 className="text-xs font-semibold text-gray-500 mb-2">{dateKey}</h3>
+                {Object.entries(groupedByDate[dateKey]!).map(([groupName, groupItems]) => (
+                  <div key={groupName} className="mb-2 last:mb-0">
+                    <h4 className="text-xs font-medium text-gray-600 mb-1 cursor-pointer hover:text-primary-600"
+                      onClick={() => {
+                        const group = data.team?.groups?.find((g: any) => g.name === groupName);
+                        if (group) navigate(`/space/group/${group.id}`);
+                      }}>
+                      {groupName}
+                    </h4>
+                    <div className="space-y-1">
+                      {(groupItems as any[]).map((item: any) => (
+                        <div key={item.id} className="px-3 py-2 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:border-primary-200 transition-colors"
+                          onClick={() => {
+                            const group = data.team?.groups?.find((g: any) => g.name === groupName);
+                            if (group) navigate(`/space/group/${group.id}`);
+                          }}>
+                          <span className="text-sm text-gray-700">{item.title}</span>
+                          <span className="text-xs text-gray-400 ml-2">{item.user?.username}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-                {older.length > 0 && (
-                  <>
-                    <button onClick={() => setShowOlderReports(!showOlderReports)}
-                      className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
-                      <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                      </svg>
-                      이전 보고서 ({older.length})
-                    </button>
-                    {showOlderReports && older.map((report: any) => (
-                      <div key={report.id} className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-2">
-                        <span onClick={() => navigate(`/report/${report.id}`)}
-                          className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
-                          {data.team?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
-                        </span>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* 업무 기록 */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">업무 기록</h2>
-        {sortedDates.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm">등록된 업무 기록이 없습니다</div>
-        ) : (
-          sortedDates.map(dateKey => (
-            <div key={dateKey} className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-500 mb-3">{dateKey}</h3>
-              {Object.entries(groupedByDate[dateKey]!).map(([groupName, groupItems]) => (
-                <div key={groupName} className="mb-3">
-                  <h4 className="text-xs font-medium text-gray-600 mb-2 px-1 cursor-pointer hover:text-primary-600"
-                    onClick={() => {
-                      const group = data.team?.groups?.find((g: any) => g.name === groupName);
-                      if (group) navigate(`/space/group/${group.id}`);
-                    }}>
-                    {groupName}
-                  </h4>
-                  <div className="space-y-1">
-                    {(groupItems as any[]).map((item: any) => (
-                      <div key={item.id} className="px-3 py-2 bg-white rounded-lg border border-gray-100 cursor-pointer hover:border-primary-200 transition-colors"
-                        onClick={() => {
-                          const group = data.team?.groups?.find((g: any) => g.name === groupName);
-                          if (group) navigate(`/space/group/${group.id}`);
-                        }}>
-                        <span className="text-sm text-gray-700">{item.title}</span>
-                        <span className="text-xs text-gray-400 ml-2">{item.user?.username}</span>
-                      </div>
-                    ))}
+                ))}
+              </div>
+            ))}
+          </DashboardSection>
+        }
+        bottom={
+          reports.length > 0 ? (
+            <DashboardSection title="주간 보고서" count={reports.length} colorBar="purple">
+              <div className="bg-gray-50 rounded-lg border border-gray-100 p-3 mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span onClick={() => navigate(`/report/${latestReport.id}`)}
+                    className="text-sm font-medium text-primary-600 hover:underline cursor-pointer">
+                    {data.team?.name} 보고서 {formatDateWithDay(latestReport.periodStart)} ~ {formatDateWithDay(latestReport.periodEnd)}
+                  </span>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleExport(latestReport.id, 'docx')}
+                      className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100">DOCX</button>
+                    <button onClick={() => handleExport(latestReport.id, 'xlsx')}
+                      className="text-xs px-3 py-1 bg-green-50 text-green-600 rounded-md hover:bg-green-100">XLSX</button>
                   </div>
                 </div>
-              ))}
-            </div>
-          ))
-        )}
-      </div>
+              </div>
+              {olderReports.length > 0 && (
+                <>
+                  <button onClick={() => setShowOlderReports(!showOlderReports)}
+                    className="text-xs text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
+                    <svg className={`w-3 h-3 transition-transform ${showOlderReports ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                    이전 보고서 ({olderReports.length})
+                  </button>
+                  {showOlderReports && olderReports.map((report: any) => (
+                    <div key={report.id} className="bg-gray-50 rounded-lg border border-gray-100 p-3 mb-2">
+                      <span onClick={() => navigate(`/report/${report.id}`)}
+                        className="text-sm font-medium text-gray-500 hover:text-primary-600 hover:underline cursor-pointer">
+                        {data.team?.name} 보고서 {formatDateWithDay(report.periodStart)} ~ {formatDateWithDay(report.periodEnd)}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </DashboardSection>
+          ) : undefined
+        }
+      />
     </div>
   );
 }
