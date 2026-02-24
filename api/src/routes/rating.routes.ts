@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
-import { submitRating, getActiveLLMConfig } from '../services/llm.service.js';
+import { submitRating, fetchAvailableModels } from '../services/llm.service.js';
 
 export const ratingRoutes = Router();
 
@@ -19,8 +19,10 @@ ratingRoutes.post('/', authenticateToken, loadUser, async (req: AuthenticatedReq
       return;
     }
 
-    const config = await getActiveLLMConfig();
-    const modelId = config?.modelId || 'unknown';
+    const userInfo = { loginid: user.loginid, username: user.username, deptname: user.deptname };
+    const models = await fetchAvailableModels(userInfo);
+    const modelId = models[0]?.id || 'unknown';
+    const modelName = models[0]?.displayName || modelId;
 
     // DB에 rating 저장
     const rating = await prisma.lLMRating.create({
@@ -35,9 +37,9 @@ ratingRoutes.post('/', authenticateToken, loadUser, async (req: AuthenticatedReq
     // Dashboard에도 rating 전송 (ONCE 패턴)
     try {
       await submitRating(
-        config?.modelName || modelId,
+        modelName,
         score,
-        { loginid: user.loginid, username: user.username, deptname: user.deptname }
+        userInfo
       );
     } catch (e) {
       console.error('Failed to submit rating to dashboard:', e);
@@ -64,13 +66,14 @@ ratingRoutes.get('/check', authenticateToken, loadUser, async (req: Authenticate
       if (existingRating) shouldRate = false;
     }
 
-    const config = await getActiveLLMConfig();
+    const userInfo = { loginid: user.loginid, username: user.username, deptname: user.deptname };
+    const models = await fetchAvailableModels(userInfo);
 
     res.json({
       shouldRate,
       requestCount: user.requestCount,
-      modelId: config?.modelId || null,
-      modelName: config?.modelName || null,
+      modelId: models[0]?.id || null,
+      modelName: models[0]?.displayName || null,
     });
   } catch (error) {
     console.error('Check rating error:', error);
