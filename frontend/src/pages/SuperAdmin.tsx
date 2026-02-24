@@ -72,9 +72,9 @@ export default function SuperAdmin() {
 
   const fetchLLMOps = () => {
     adminApi.getLLMOperations().then(res => {
-      setLlmOps(res.data.configs || []);
+      setLlmOps(res.data.operations || []);
       setAvailableModels(res.data.availableModels || []);
-      setOpTypes(res.data.operationTypes || []);
+      setOpTypes((res.data.operationTypes || []).map((t: any) => typeof t === 'string' ? t : t.key));
     }).catch(() => {});
   };
 
