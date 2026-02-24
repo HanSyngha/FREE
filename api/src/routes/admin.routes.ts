@@ -203,7 +203,7 @@ adminRoutes.post('/team-admin', authenticateToken, requireSuperAdmin, async (req
 // DELETE /admin/team-admin/:id - Team Admin 해제
 adminRoutes.delete('/team-admin/:id', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    await prisma.teamAdmin.delete({ where: { id: req.params.id } });
+    await prisma.teamAdmin.delete({ where: { id: req.params.id as string } });
     res.json({ success: true });
   } catch (error) {
     console.error('Remove team admin error:', error);
@@ -354,7 +354,7 @@ adminRoutes.get('/llm-operations', authenticateToken, requireSuperAdmin, async (
 // PUT /admin/llm-operations/:operation - 특정 작업의 모델 변경
 adminRoutes.put('/llm-operations/:operation', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const { operation } = req.params;
+    const operation = req.params.operation as string;
     const { modelId } = req.body;
     if (!modelId) { res.status(400).json({ error: 'modelId is required' }); return; }
 
@@ -374,7 +374,7 @@ adminRoutes.put('/llm-operations/:operation', authenticateToken, requireSuperAdm
 // DELETE /admin/llm-operations/:operation - 특정 작업 설정 삭제 (기본 모델로 복귀)
 adminRoutes.delete('/llm-operations/:operation', authenticateToken, requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const { operation } = req.params;
+    const operation = req.params.operation as string;
     await prisma.lLMOperationConfig.delete({ where: { operation } }).catch(() => {});
     res.json({ success: true });
   } catch (error) {
