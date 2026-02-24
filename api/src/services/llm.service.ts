@@ -157,7 +157,127 @@ export async function callLLM(
 }
 
 /**
- * LLM으로 Item 분리/정리
+ * LLM으로 텍스트 → WorkLog + Todo 동시 분리
+ * 과거형/완료형 → WorkLog, 미래형/예정 → Todo
+ */
+export async function parseTextWithLLM(
+  userInput: string,
+  userContext: {
+    username: string;
+    businessUnit: string;
+    teamName: string;
+    groupName: string;
+    partName: string;
+    today: string;
+    defaultDate?: string;
+    preferences?: {
+      tone?: string;
+      language?: string;
+      emphasis?: string;
+      customInstructions?: string;
+    };
+    partItems?: Array<{ id: string; title: string }>;
+    existingTodos?: Array<{ id: string; title: string }>;
+  },
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<{
+  workLogs: Array<{ title: string; content: string; date: string; linkedItemId?: string }>;
+  todos: Array<{ title: string; endDate?: string; linkedItemId?: string }>;
+}> {
+  const defaultDate = userContext.defaultDate || userContext.today;
+  const prefs = userContext.preferences || {};
+
+  const toneMap: Record<string, string> = { formal: '격식체로 작성', concise: '간결하게 작성' };
+  const toneInstruction = prefs.tone ? (toneMap[prefs.tone] || prefs.tone) : '';
+  const languageInstruction = prefs.language === 'english' ? '모든 업무 항목을 영어로 작성해 주세요.' : '';
+  const emphasisInstruction = prefs.emphasis ? `다음 내용을 특히 강조해서 작성해 주세요: ${prefs.emphasis}` : '';
+  const customInstruction = prefs.customInstructions || '';
+
+  const preferencesSection = [toneInstruction, languageInstruction, emphasisInstruction, customInstruction].filter(Boolean).join('\n- ');
+  const preferencesPrompt = preferencesSection ? `\n\n## 사용자 선호 설정\n- ${preferencesSection}` : '';
+
+  const partItemsStr = userContext.partItems?.length
+    ? `\n\n## 파트 목표 (연결 참조용)\n${userContext.partItems.map(i => `- id: "${i.id}", title: "${i.title}"`).join('\n')}`
+    : '';
+
+  const existingTodosStr = userContext.existingTodos?.length
+    ? `\n\n## 기존 미완료 할일 (중복 방지)\n${userContext.existingTodos.map(t => `- "${t.title}"`).join('\n')}`
+    : '';
+
+  const systemPrompt = `당신은 업무 보고 도우미입니다.
+
+## 사용자 정보
+- 이름: ${userContext.username}
+- 사업부: ${userContext.businessUnit}
+- 팀: ${userContext.teamName}
+- 그룹: ${userContext.groupName}
+- 파트: ${userContext.partName}
+- 오늘 날짜: ${userContext.today}
+
+## 작업
+아래 텍스트에서 **업무 기록(workLogs)**과 **할일(todos)**을 분리해 주세요.
+
+### 분류 기준
+- **workLogs**: 이미 완료한 일, 과거형/완료형 표현 → 업무 기록으로
+- **todos**: 앞으로 할 일, 미래형/예정 표현 → 할일로
+
+### 규칙
+1. 사용자 본인의 관점에서 추출합니다
+2. 다른 사람의 업무나 일반적인 공유 정보는 제외합니다
+3. 날짜를 특정할 수 없으면 workLogs는 ${defaultDate}를 사용합니다
+4. 기존 미완료 할일과 중복되는 항목은 todos에서 제외합니다
+5. 파트 목표가 있으면 관련 workLog/todo에 linkedItemId를 매핑합니다 (확실한 경우만)${partItemsStr}${existingTodosStr}${preferencesPrompt}
+
+다음 JSON 형식으로 출력하세요:
+{
+  "workLogs": [
+    { "title": "간결한 업무 제목", "content": "업무 상세 내용", "date": "YYYY-MM-DD", "linkedItemId": "목표ID 또는 null" }
+  ],
+  "todos": [
+    { "title": "할일 제목", "endDate": "YYYY-MM-DD 또는 null", "linkedItemId": "목표ID 또는 null" }
+  ]
+}
+
+반드시 유효한 JSON만 출력하세요. 다른 텍스트는 포함하지 마세요.`;
+
+  const result = await callLLM(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: userInput }],
+    userInfo
+  );
+
+  const jsonMatch = result.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('LLM did not return valid JSON');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  // WorkLog 날짜 유효성 검사
+  const todayDate = parseKSTDate(userContext.today);
+  const minDate = new Date(todayDate);
+  minDate.setDate(minDate.getDate() - 29);
+  const fallbackDate = parseKSTDate(defaultDate);
+
+  const workLogs = (parsed.workLogs || []).map((wl: any) => {
+    let wlDate = parseKSTDate(wl.date);
+    if (isNaN(wlDate.getTime()) || wlDate > todayDate || wlDate < minDate) wlDate = fallbackDate;
+    return {
+      title: String(wl.title || ''),
+      content: String(wl.content || ''),
+      date: toKSTDateString(wlDate),
+      linkedItemId: wl.linkedItemId || null,
+    };
+  });
+
+  const todos = (parsed.todos || []).map((todo: any) => ({
+    title: String(todo.title || ''),
+    endDate: todo.endDate || null,
+    linkedItemId: todo.linkedItemId || null,
+  }));
+
+  return { workLogs, todos };
+}
+
+/**
+ * LLM으로 Item 분리/정리 (하위 호환)
  */
 export async function parseItemsWithLLM(
   userInput: string,
@@ -352,6 +472,171 @@ export async function syncModelsFromEndpoint(
     displayName: m._nexus?.displayName || m.id,
     maxTokens: m._nexus?.maxTokens || 128000,
   }));
+}
+
+/**
+ * LLM으로 조직장 Item 입력 → 목표 분리+태그+매핑
+ */
+export async function parseGoalsWithLLM(
+  text: string,
+  context: {
+    level: string;
+    existingItems: Array<{ id: string; title: string }>;
+    existingTags: string[];
+    parentItems: Array<{ id: string; title: string }>;
+  },
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<Array<{
+  title: string;
+  content: string;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  tags: string[];
+  parentTitle: string | null;
+}>> {
+  const existingItemsStr = context.existingItems.length
+    ? `\n\n## 기존 목표 (중복 방지)\n${context.existingItems.map(i => `- "${i.title}"`).join('\n')}`
+    : '';
+
+  const existingTagsStr = context.existingTags.length
+    ? `\n\n## 기존 태그 (재사용 우선)\n${context.existingTags.join(', ')}`
+    : '';
+
+  const parentItemsStr = context.parentItems.length
+    ? `\n\n## 상위 목표 (매핑 참조)\n${context.parentItems.map(p => `- "${p.title}"`).join('\n')}`
+    : '';
+
+  const levelLabel = context.level === 'TEAM' ? '팀' : context.level === 'GROUP' ? '그룹' : '파트';
+
+  const systemPrompt = `당신은 조직 목표 관리 도우미입니다.
+
+## 작업
+아래 텍스트에서 ${levelLabel} 단위 목표(Item)를 분리해 주세요.
+
+### 규칙
+1. 하나의 텍스트에서 여러 목표가 나올 수 있습니다
+2. 기존 목표와 중복되는 항목은 제외합니다
+3. 태그는 기존 태그를 우선 재사용하고, 필요시 새로 생성합니다
+4. 상위 목표가 있으면 가장 관련도 높은 상위 목표 title을 parentTitle에 매핑합니다
+5. status는 PLANNED/IN_PROGRESS/COMPLETED 중 하나 (기본: PLANNED)
+6. 날짜가 명시되지 않으면 null${existingItemsStr}${existingTagsStr}${parentItemsStr}
+
+다음 JSON 배열 형식으로 출력하세요:
+[
+  {
+    "title": "목표 제목",
+    "content": "목표 상세 설명",
+    "status": "PLANNED",
+    "startDate": "YYYY-MM-DD 또는 null",
+    "endDate": "YYYY-MM-DD 또는 null",
+    "tags": ["태그1", "태그2"],
+    "parentTitle": "상위 목표 title 또는 null"
+  }
+]
+
+반드시 유효한 JSON 배열만 출력하세요.`;
+
+  const result = await callLLM(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
+    userInfo
+  );
+
+  const jsonMatch = result.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error('LLM did not return valid JSON array');
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  return parsed.map((g: any) => ({
+    title: String(g.title || ''),
+    content: String(g.content || ''),
+    status: ['PLANNED', 'IN_PROGRESS', 'COMPLETED'].includes(g.status) ? g.status : 'PLANNED',
+    startDate: g.startDate || null,
+    endDate: g.endDate || null,
+    tags: Array.isArray(g.tags) ? g.tags.map(String) : [],
+    parentTitle: g.parentTitle || null,
+  }));
+}
+
+/**
+ * LLM으로 Todo → 파트 Item 자동 연결
+ */
+export async function linkTodoToItem(
+  todoTitle: string,
+  endDate: string | null | undefined,
+  partItems: Array<{ id: string; title: string }>,
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<{ linkedItemId: string | null }> {
+  if (partItems.length === 0) return { linkedItemId: null };
+
+  const systemPrompt = `당신은 할일과 조직 목표를 연결하는 도우미입니다.
+
+## 파트 목표 목록
+${partItems.map(i => `- id: "${i.id}", title: "${i.title}"`).join('\n')}
+
+## 작업
+아래 할일이 위 목표 중 어떤 것과 가장 관련이 있는지 판단해 주세요.
+확실한 연결만 하세요. 관련 목표가 없으면 null을 반환합니다.
+
+다음 JSON 형식으로 출력하세요:
+{ "linkedItemId": "목표ID 또는 null" }
+
+반드시 유효한 JSON만 출력하세요.`;
+
+  const userContent = `할일: "${todoTitle}"${endDate ? `, 마감일: ${endDate}` : ''}`;
+
+  const result = await callLLM(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: userContent }],
+    userInfo
+  );
+
+  const jsonMatch = result.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { linkedItemId: null };
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  const linkedId = parsed.linkedItemId || null;
+
+  // 유효한 Item ID인지 검증
+  if (linkedId && partItems.some(i => i.id === linkedId)) {
+    return { linkedItemId: linkedId };
+  }
+  return { linkedItemId: null };
+}
+
+/**
+ * LLM으로 Item 진행률/진척사항 업데이트
+ */
+export async function updateItemProgress(
+  item: { id: string; title: string; content: string },
+  childData: string,
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<{ progress: number; summary: string }> {
+  const systemPrompt = `당신은 목표 진행률 분석 도우미입니다.
+
+## 목표
+- 제목: ${item.title}
+- 설명: ${item.content}
+
+## 작업
+아래 하위 데이터(하위 목표/할일/업무기록)를 분석하여 이 목표의 진행률과 진척사항을 판단해 주세요.
+
+다음 JSON 형식으로 출력하세요:
+{ "progress": 0~100, "summary": "진척사항 1-2문장" }
+
+반드시 유효한 JSON만 출력하세요.`;
+
+  const result = await callLLM(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: childData }],
+    userInfo
+  );
+
+  const jsonMatch = result.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { progress: 0, summary: '' };
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  return {
+    progress: Math.max(0, Math.min(100, Number(parsed.progress) || 0)),
+    summary: String(parsed.summary || ''),
+  };
 }
 
 /**

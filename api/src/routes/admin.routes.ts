@@ -339,7 +339,7 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
       for (const item of items) {
         const itemDate = item.date ? parseKSTDate(item.date) : todayDate;
 
-        const created = await tx.item.create({
+        const created = await tx.workLog.create({
           data: {
             userId: user.id,
             spaceId: personalSpace.id,
@@ -353,8 +353,8 @@ adminRoutes.post('/items', authenticateToken, requireSuperAdmin, async (req: Aut
         await tx.activityLog.create({
           data: {
             userId: user.id,
-            action: 'CREATE_ITEM',
-            targetType: 'ITEM',
+            action: 'CREATE_WORKLOG',
+            targetType: 'WORKLOG',
             targetId: created.id,
             details: `[Admin] ${created.title}`,
           },

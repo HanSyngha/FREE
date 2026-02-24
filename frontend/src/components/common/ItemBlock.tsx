@@ -1,9 +1,9 @@
 /**
- * Item Block Component
+ * WorkLog Block Component (구 ItemBlock)
  */
 import { useState } from 'react';
 
-interface ItemBlockProps {
+interface WorkLogBlockProps {
   item: {
     id: string;
     title: string;
@@ -26,7 +26,7 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-export default function ItemBlock({ item, editable = false, deletable = false, onUpdate, onDelete }: ItemBlockProps) {
+export default function WorkLogBlock({ item, editable = false, deletable = false, onUpdate, onDelete }: WorkLogBlockProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
   const [editContent, setEditContent] = useState(item.content);

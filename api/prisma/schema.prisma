@@ -25,9 +25,11 @@ model User {
   group        Group?    @relation(fields: [groupId], references: [id])
   part         Part?     @relation(fields: [partId], references: [id])
 
-  items        Item[]
+  workLogs     WorkLog[]
+  todos        Todo[]
   ratings      LLMRating[]
   teamAdmins   TeamAdmin[]
+  orgAdmins    OrgAdmin[]
   activityLogs ActivityLog[]
   announcements Announcement[]
 
@@ -43,6 +45,7 @@ model Team {
   users        User[]
   groups       Group[]
   spaces       Space[]
+  tags         Tag[]
   teamAdmins   TeamAdmin[]
   reportJobs   ReportJob[]
   reportLogs   ReportLog[]
@@ -88,7 +91,8 @@ model Space {
 
   team      Team?     @relation(fields: [teamId], references: [id])
 
-  items     Item[]
+  workLogs  WorkLog[]
+  todos     Todo[]
   reports   Report[]
 
   @@index([type, ownerId])
@@ -102,37 +106,146 @@ enum SpaceType {
   TEAM
 }
 
-model Item {
-  id        String   @id @default(uuid())
-  userId    String
-  spaceId   String
-  title     String
-  content   String
-  link      String?
-  date      DateTime @db.Date
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// 기존 Item -> WorkLog (업무 기록)
+model WorkLog {
+  id           String   @id @default(uuid())
+  userId       String
+  spaceId      String
+  title        String
+  content      String
+  link         String?
+  date         DateTime @db.Date
+  linkedItemId String?  // 파트 Item(목표)에 LLM 자동 연결
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
-  space     Space    @relation(fields: [spaceId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+  space        Space    @relation(fields: [spaceId], references: [id])
+  linkedItem   Item?    @relation(fields: [linkedItemId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
   @@index([spaceId, date])
-  @@map("items")
+  @@map("work_logs")
+}
+
+// 조직 목표
+model Item {
+  id           String     @id @default(uuid())
+  title        String
+  content      String     @default("")
+  status       ItemStatus @default(PLANNED)
+  startDate    DateTime?  @db.Date
+  endDate      DateTime?  @db.Date
+  progress     Int        @default(0) // 0-100
+  summary      String?    // LLM 자동 진척사항
+  level        OrgLevel
+  ownerId      String     // teamId / groupId / partId
+  parentItemId String?    // 상위 Item FK
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  parentItem   Item?      @relation("ItemHierarchy", fields: [parentItemId], references: [id], onDelete: SetNull)
+  childItems   Item[]     @relation("ItemHierarchy")
+  itemTags     ItemTag[]
+  linkedWorkLogs WorkLog[]
+  linkedTodos  Todo[]
+
+  @@index([level, ownerId])
+  @@index([parentItemId])
+  @@map("goals")
+}
+
+enum ItemStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum OrgLevel {
+  TEAM
+  GROUP
+  PART
+}
+
+// 개인 할일
+model Todo {
+  id           String    @id @default(uuid())
+  userId       String
+  spaceId      String
+  title        String
+  content      String    @default("")
+  startDate    DateTime? @db.Date
+  endDate      DateTime? @db.Date
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  linkedItemId String?   // 파트 Item에 LLM 자동 연결
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User      @relation(fields: [userId], references: [id])
+  space        Space     @relation(fields: [spaceId], references: [id])
+  linkedItem   Item?     @relation(fields: [linkedItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completed])
+  @@index([spaceId])
+  @@map("todos")
+}
+
+// 목표 분류 태그
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  itemTags  ItemTag[]
+
+  @@unique([name, teamId])
+  @@map("tags")
+}
+
+// Item-Tag M:N
+model ItemTag {
+  id     String @id @default(uuid())
+  itemId String
+  tagId  String
+
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, tagId])
+  @@map("item_tags")
+}
+
+// 조직 관리 권한
+model OrgAdmin {
+  id        String   @id @default(uuid())
+  userId    String
+  level     OrgLevel
+  targetId  String   // teamId / groupId / partId
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, level, targetId])
+  @@map("org_admins")
 }
 
 model Report {
-  id              String     @id @default(uuid())
-  spaceId         String
-  type            ReportType
-  byMemberContent String
-  byItemContent   String
-  periodStart     DateTime   @db.Date
-  periodEnd       DateTime   @db.Date
-  createdAt       DateTime   @default(now())
-  expiresAt       DateTime
+  id               String     @id @default(uuid())
+  spaceId          String
+  type             ReportType
+  byMemberContent  String
+  byItemContent    String
+  progressContent  String?    // 목표 진행률 섹션
+  periodStart      DateTime   @db.Date
+  periodEnd        DateTime   @db.Date
+  createdAt        DateTime   @default(now())
+  expiresAt        DateTime
 
-  space           Space      @relation(fields: [spaceId], references: [id])
+  space            Space      @relation(fields: [spaceId], references: [id])
 
   @@index([spaceId, createdAt])
   @@map("reports")

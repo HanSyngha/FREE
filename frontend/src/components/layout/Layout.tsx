@@ -100,15 +100,24 @@ export default function Layout() {
         >
             <nav className="space-y-1" aria-label="팀 구조 탐색">
               {/* 나의 업무 기록 */}
-              <div className="mb-4">
+              <div className="mb-2">
                 <NavLink to="/space/personal" className={navLinkClass}>
                   나의 업무 기록
                 </NavLink>
+                <NavLink to="/goals/dashboard" className={navLinkClass}>
+                  목표 대시보드
+                </NavLink>
               </div>
 
-              {/* 팀 → 그룹 → 파트 트리 */}
+              {/* 사업부 → 팀 → 그룹 → 파트 트리 */}
               {sidebarData?.team && (
                 <div className="mb-3">
+                  {/* 사업부 */}
+                  {sidebarData.team.businessUnit && (
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase px-3 pt-2 pb-1">
+                      {sidebarData.team.businessUnit}
+                    </p>
+                  )}
                   {/* 팀 */}
                   <NavLink to="/space/team" className={({ isActive }) =>
                     `block px-3 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
@@ -116,9 +125,6 @@ export default function Layout() {
                     }`
                   }>
                     {sidebarData.team.name}
-                    {sidebarData.team.businessUnit && (
-                      <span className="text-xs text-gray-400 ml-1">({sidebarData.team.businessUnit})</span>
-                    )}
                   </NavLink>
 
                   {/* 그룹 → 파트 */}

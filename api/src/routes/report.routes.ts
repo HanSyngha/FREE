@@ -36,7 +36,7 @@ reportRoutes.post('/personal', authenticateToken, loadUser, generalLimit, async 
     const periodStart = new Date(periodEnd);
     periodStart.setDate(periodStart.getDate() - 6);
 
-    const items = await prisma.item.findMany({
+    const items = await prisma.workLog.findMany({
       where: {
         userId: user.id,
         spaceId: space.id,

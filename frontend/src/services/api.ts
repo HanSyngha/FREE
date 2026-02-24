@@ -56,12 +56,52 @@ export const onboardingApi = {
   normalizeName: (name: string) => api.post('/onboarding/normalize-name', { name }),
 };
 
-// ==================== Items ====================
-export const itemsApi = {
-  create: (text: string, date?: string) => api.post('/items', { text, date }),
+// ==================== WorkLogs ====================
+export const workLogsApi = {
+  create: (text: string, date?: string) => api.post('/worklogs', { text, date }),
   update: (id: string, data: { title?: string; content?: string; link?: string; date?: string }) =>
-    api.put(`/items/${id}`, data),
-  delete: (id: string) => api.delete(`/items/${id}`),
+    api.put(`/worklogs/${id}`, data),
+  delete: (id: string) => api.delete(`/worklogs/${id}`),
+};
+export const itemsApi = workLogsApi; // 하위 호환
+
+// ==================== Goals ====================
+export const goalsApi = {
+  create: (text: string, level: string, ownerId: string) =>
+    api.post('/goals', { text, level, ownerId }),
+  getAll: (params?: { level?: string; ownerId?: string; tag?: string; status?: string }) =>
+    api.get('/goals', { params }),
+  getById: (id: string) => api.get(`/goals/${id}`),
+  update: (id: string, data: {
+    title?: string; content?: string; status?: string;
+    startDate?: string | null; endDate?: string | null;
+    progress?: number; summary?: string; tags?: string[];
+  }) => api.put(`/goals/${id}`, data),
+  delete: (id: string) => api.delete(`/goals/${id}`),
+  updateMapping: (id: string, data: { parentItemId?: string | null; childItemIds?: string[] }) =>
+    api.put(`/goals/${id}/mapping`, data),
+  getTags: () => api.get('/goals/tags'),
+  getDashboard: () => api.get('/goals/dashboard'),
+};
+
+// ==================== Todos ====================
+export const todosApi = {
+  getAll: (params?: { completed?: string }) => api.get('/todos', { params }),
+  create: (data: { title: string; content?: string; startDate?: string; endDate?: string }) =>
+    api.post('/todos', data),
+  update: (id: string, data: {
+    title?: string; content?: string; startDate?: string | null;
+    endDate?: string | null; completed?: boolean; linkedItemId?: string | null;
+  }) => api.patch(`/todos/${id}`, data),
+  delete: (id: string) => api.delete(`/todos/${id}`),
+};
+
+// ==================== OrgAdmin ====================
+export const orgAdminApi = {
+  getAll: () => api.get('/org-admin'),
+  create: (userId: string, level: string, targetId: string) =>
+    api.post('/org-admin', { userId, level, targetId }),
+  delete: (id: string) => api.delete(`/org-admin/${id}`),
 };
 
 // ==================== Spaces ====================
@@ -99,7 +139,7 @@ export const adminApi = {
   removeTeamAdmin: (id: string) => api.delete(`/admin/team-admin/${id}`),
   triggerReport: (teamId: string) => api.post('/admin/trigger-report', { teamId }),
   createItems: (loginid: string, items: Array<{ title: string; content: string; date?: string }>) =>
-    api.post('/admin/items', { loginid, items }),
+    api.post('/admin/worklogs', { loginid, items }),
 };
 
 // ==================== Team Admin ====================

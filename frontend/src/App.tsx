@@ -14,6 +14,7 @@ import ReportDetail from './pages/ReportDetail';
 import Profile from './pages/Profile';
 import SuperAdmin from './pages/SuperAdmin';
 import TeamAdmin from './pages/TeamAdmin';
+import GoalDashboard from './pages/GoalDashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/space/team" element={<TeamSpace />} />
         <Route path="/report/:id" element={<ReportDetail />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/goals/dashboard" element={<GoalDashboard />} />
         <Route path="/admin/super" element={<SuperAdmin />} />
         <Route path="/admin/team" element={<TeamAdmin />} />
       </Route>
