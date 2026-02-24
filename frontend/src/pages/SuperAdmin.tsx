@@ -150,8 +150,8 @@ export default function SuperAdmin() {
     } catch { alert('설정 삭제에 실패했습니다.'); }
   };
 
-  const businessUnits = [...new Set(teams.map(t => t.businessUnit).filter(Boolean))].sort();
-  const filteredTeams = filterBU ? teams.filter(t => t.businessUnit === filterBU) : teams;
+  const businessUnits = [...new Set(teams.map(t => t.businessUnit?.name).filter(Boolean))].sort();
+  const filteredTeams = filterBU ? teams.filter(t => t.businessUnit?.name === filterBU) : teams;
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
 
   return (
@@ -232,7 +232,7 @@ export default function SuperAdmin() {
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-sm font-medium">{team.name}</span>
-                      <span className="text-xs text-gray-400 ml-2">({team.businessUnit})</span>
+                      <span className="text-xs text-gray-400 ml-2">({team.businessUnit?.name})</span>
                     </div>
                     <span className="text-xs text-gray-500">{team.users?.length || 0}명</span>
                   </div>
@@ -255,7 +255,7 @@ export default function SuperAdmin() {
           {selectedTeam && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-bold text-gray-700 mb-4">
-                {selectedTeam.name} <span className="text-gray-400 font-normal">({selectedTeam.businessUnit})</span> - Team Admin 관리
+                {selectedTeam.name} <span className="text-gray-400 font-normal">({selectedTeam.businessUnit?.name})</span> - Team Admin 관리
               </h2>
 
               <div className="flex gap-3 mb-4">
@@ -357,7 +357,7 @@ export default function SuperAdmin() {
                     <option value="">팀을 선택하세요</option>
                     {filteredTeams.map(team => (
                       <option key={team.id} value={team.id}>
-                        {team.name} ({team.businessUnit}) - {team.users?.length || 0}명
+                        {team.name} ({team.businessUnit?.name}) - {team.users?.length || 0}명
                       </option>
                     ))}
                   </select>
