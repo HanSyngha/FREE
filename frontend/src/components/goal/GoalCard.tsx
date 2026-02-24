@@ -231,7 +231,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, onUpd
               <h4 className="text-xs font-semibold text-gray-500">상위 목표</h4>
               {canEdit && parentCandidates && parentCandidates.length > 0 && (
                 <button onClick={() => setShowParentSelect(!showParentSelect)}
-                  className="text-xs text-primary-600 hover:underline">변경</button>
+                  className="text-xs text-primary-600 hover:underline">
+                  {goal.parentItem ? '변경' : '선택'}
+                </button>
               )}
             </div>
             {goal.parentItem ? (
@@ -243,11 +245,11 @@ export default function GoalCard({ goal, canEdit = false, compact = false, onUpd
                 )}
               </div>
             ) : (
-              <span className="text-xs text-gray-400">(없음)</span>
+              !showParentSelect && <span className="text-xs text-gray-400">(없음)</span>
             )}
             {showParentSelect && parentCandidates && (
               <select onChange={e => { if (e.target.value) handleChangeParent(e.target.value); }}
-                className="mt-1 w-full px-2 py-1 text-xs border rounded-lg">
+                className="mt-1 w-full px-2 py-1 text-xs border rounded-lg" autoFocus>
                 <option value="">상위 목표 선택...</option>
                 {parentCandidates.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>

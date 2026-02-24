@@ -23,6 +23,7 @@ export default function GroupSpace() {
   const [data, setData] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
   const [partGoals, setPartGoals] = useState<Record<string, any[]>>({});
+  const [teamGoals, setTeamGoals] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [showOlderReports, setShowOlderReports] = useState(false);
 
@@ -37,6 +38,15 @@ export default function GroupSpace() {
       ]);
       setData(spaceRes.data);
       setGoals(goalsRes.data.goals || []);
+
+      // 상위 팀 목표 조회 (parentCandidates용)
+      const teamId = spaceRes.data.group?.teamId;
+      if (teamId) {
+        try {
+          const teamRes = await goalsApi.getAll({ level: 'TEAM', ownerId: teamId });
+          setTeamGoals((teamRes.data.goals || []).map((g: any) => ({ id: g.id, title: g.title })));
+        } catch { setTeamGoals([]); }
+      }
 
       const parts = spaceRes.data.parts || [];
       const partGoalMap: Record<string, any[]> = {};
@@ -100,7 +110,7 @@ export default function GroupSpace() {
           <h2 className="text-sm font-semibold text-gray-500 mb-3">그룹 목표 ({goals.length})</h2>
           <div className="space-y-3">
             {goals.map((goal: any) => (
-              <GoalCard key={goal.id} goal={goal} canEdit={isGroupAdmin} onUpdate={fetchData} />
+              <GoalCard key={goal.id} goal={goal} canEdit={isGroupAdmin} onUpdate={fetchData} parentCandidates={teamGoals} />
             ))}
           </div>
         </div>
