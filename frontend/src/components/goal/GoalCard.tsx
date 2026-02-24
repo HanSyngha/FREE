@@ -37,6 +37,8 @@ interface GoalCardProps {
   unmappedChildren?: Array<{ id: string; title: string }>;
   /** 하위 목표의 ownerId → 조직명 맵 */
   childOrgNames?: Record<string, string>;
+  /** 클릭 핸들러 (목표 대시보드 등에서 사용) */
+  onClick?: () => void;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {

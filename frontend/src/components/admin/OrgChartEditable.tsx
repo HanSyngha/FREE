@@ -412,19 +412,19 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
                       )}
 
                       {/* 연결선 → 파트들 */}
-                      {group.children.length > 0 && (
+                      {(group.children?.length ?? 0) > 0 && (
                         <div className="flex items-stretch">
                           <div className="flex flex-col justify-center w-6 shrink-0">
                             <div className="border-t border-gray-300 w-full" />
                           </div>
                           <div className="flex flex-col gap-2">
-                            {group.children.map((part, pi) => (
+                            {group.children!.map((part, pi) => (
                               <div key={part.id} className="flex items-center">
-                                {group.children.length > 1 && (
+                                {group.children!.length > 1 && (
                                   <div className="relative w-3 self-stretch shrink-0">
                                     <div className={`absolute left-0 border-l border-gray-300 ${
                                       pi === 0 ? 'top-1/2 bottom-0' :
-                                      pi === group.children.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
+                                      pi === group.children!.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
                                     }`} />
                                     <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
                                   </div>
@@ -462,7 +462,7 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
                       )}
 
                       {/* 파트가 없을 때 새 파트 생성 */}
-                      {group.children.length === 0 && creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
+                      {(group.children?.length ?? 0) === 0 && creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
                         <div className="flex items-center">
                           <div className="w-6 border-t border-gray-300" />
                           <InlineInput

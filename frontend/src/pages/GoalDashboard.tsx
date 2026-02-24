@@ -17,7 +17,7 @@ export default function GoalDashboard() {
 
   useEffect(() => {
     goalsApi.getDashboard()
-      .then(res => setDashData(res.data))
+      .then((res: any) => setDashData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
