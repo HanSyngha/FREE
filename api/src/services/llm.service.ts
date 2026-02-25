@@ -147,6 +147,8 @@ export async function parseTextWithLLM(
   userInput: string,
   userContext: {
     username: string;
+    loginid: string;
+    deptname: string;
     businessUnit: string;
     teamName: string;
     groupName: string;
@@ -189,24 +191,27 @@ export async function parseTextWithLLM(
 
   const systemPrompt = `당신은 업무 보고 도우미입니다.
 
-## 사용자 정보
+## 사용자 정보 (이 사람의 업무만 추출)
 - 이름: ${userContext.username}
+- ID/이메일: ${userContext.loginid}
+- 부서: ${userContext.deptname}
 - 사업부: ${userContext.businessUnit}
 - 팀: ${userContext.teamName}
 - 그룹: ${userContext.groupName}
 - 파트: ${userContext.partName}
-- 오늘 날짜: ${userContext.today}
+- 오늘 날짜(KST): ${userContext.today}
 
 ## 작업
-아래 텍스트에서 **업무 기록(workLogs)**과 **할일(todos)**을 분리해 주세요.
+아래 텍스트에서 **위 사용자 본인의** 업무 기록(workLogs)과 할일(todos)만 분리해 주세요.
+텍스트가 대화 기록, 메신저, 이메일 등 여러 사람의 내용이 혼재된 경우에도 반드시 위 사용자 본인이 수행했거나 수행할 내용만 추출합니다.
 
 ### 분류 기준
 - **workLogs**: 이미 완료한 일, 과거형/완료형 표현 → 업무 기록으로
 - **todos**: 앞으로 할 일, 미래형/예정 표현 → 할일로
 
 ### 규칙
-1. 사용자 본인의 관점에서 추출합니다
-2. 다른 사람의 업무나 일반적인 공유 정보는 제외합니다
+1. 위 사용자(${userContext.username} / ${userContext.loginid})의 관점에서만 추출합니다
+2. 다른 사람의 업무, 다른 사람에게 배정된 일, 일반적인 공유 정보는 반드시 제외합니다
 3. 날짜를 특정할 수 없으면 workLogs는 ${defaultDate}를 사용합니다
 4. 기존 미완료 할일과 중복되는 항목은 todos에서 제외합니다
 5. 파트 목표가 있으면 관련 workLog/todo에 linkedItemId를 매핑합니다 (확실한 경우만)
@@ -273,6 +278,8 @@ export async function parseItemsWithLLM(
   userInput: string,
   userContext: {
     username: string;
+    loginid: string;
+    deptname: string;
     businessUnit: string;
     teamName: string;
     groupName: string;
@@ -302,20 +309,23 @@ export async function parseItemsWithLLM(
 
   const systemPrompt = `당신은 업무 보고 도우미입니다.
 
-## 사용자 정보
+## 사용자 정보 (이 사람의 업무만 추출)
 - 이름: ${userContext.username}
+- ID/이메일: ${userContext.loginid}
+- 부서: ${userContext.deptname}
 - 사업부: ${userContext.businessUnit}
 - 팀: ${userContext.teamName}
 - 그룹: ${userContext.groupName}
 - 파트: ${userContext.partName}
-- 오늘 날짜: ${userContext.today}
+- 오늘 날짜(KST): ${userContext.today}
 
 ## 작업
-아래 텍스트에서 **위 사용자 본인이 수행한 일/성과** 를 중심으로 개별 업무 항목(item)을 분리해 주세요.
+아래 텍스트에서 **위 사용자(${userContext.username} / ${userContext.loginid}) 본인이 수행한 일/성과** 를 중심으로 개별 업무 항목(item)을 분리해 주세요.
+텍스트가 대화 기록, 메신저, 이메일 등 여러 사람의 내용이 혼재된 경우에도 반드시 위 사용자 본인이 수행한 내용만 추출합니다.
 
 규칙:
-1. 사용자 본인의 관점에서 한 일/성과 위주로 추출합니다
-2. 다른 사람의 업무나 일반적인 공유 정보는 제외합니다
+1. 위 사용자(${userContext.username} / ${userContext.loginid})의 관점에서 한 일/성과 위주로 추출합니다
+2. 다른 사람의 업무, 다른 사람에게 배정된 일, 일반적인 공유 정보는 반드시 제외합니다
 3. 하나의 입력에서 여러 item이 나올 수 있습니다
 4. 날짜 정보가 텍스트에 포함된 경우 해당 날짜를 item의 date로 지정합니다
 5. 날짜를 특정할 수 없으면 ${defaultDate}를 사용합니다${preferencesPrompt}
