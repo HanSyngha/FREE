@@ -47,10 +47,18 @@ export const authApi = {
 
 // ==================== Onboarding ====================
 export const onboardingApi = {
+  getBusinessUnits: () => api.get('/onboarding/business-units'),
+  getTeams: (buId: string) => api.get('/onboarding/teams', { params: { buId } }),
   getGroups: () => api.get('/onboarding/groups'),
   getParts: (groupId: string) => api.get('/onboarding/parts', { params: { groupId } }),
-  setup: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
-    api.post('/onboarding/setup', data),
+  setup: (data: {
+    buId?: string; buName?: string;
+    teamId?: string; teamName?: string;
+    groupId?: string; groupName?: string;
+    partId?: string; partName?: string;
+    isDirect?: boolean; isGroupDirect?: boolean;
+    adminRole?: string | null;
+  }) => api.post('/onboarding/setup', data),
 };
 
 // ==================== WorkLogs ====================
@@ -102,7 +110,12 @@ export const orgAdminApi = {
 
 // ==================== Org Management ====================
 export const orgApi = {
-  getTree: (teamId?: string) => api.get('/org/tree', { params: teamId ? { teamId } : {} }),
+  getTree: (teamId?: string, buId?: string) => {
+    const params: Record<string, string> = {};
+    if (teamId) params.teamId = teamId;
+    if (buId) params.buId = buId;
+    return api.get('/org/tree', { params });
+  },
   createGroup: (teamId: string, name: string) => api.post('/org/groups', { teamId, name }),
   renameGroup: (id: string, name: string) => api.put(`/org/groups/${id}`, { name }),
   deleteGroup: (id: string) => api.delete(`/org/groups/${id}`),
