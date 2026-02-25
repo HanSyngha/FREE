@@ -47,10 +47,18 @@ export const authApi = {
 
 // ==================== Onboarding ====================
 export const onboardingApi = {
+  getBusinessUnits: () => api.get('/onboarding/business-units'),
+  getTeams: (buId: string) => api.get('/onboarding/teams', { params: { buId } }),
   getGroups: () => api.get('/onboarding/groups'),
   getParts: (groupId: string) => api.get('/onboarding/parts', { params: { groupId } }),
-  setup: (data: { groupId?: string; groupName?: string; partId?: string; partName?: string }) =>
-    api.post('/onboarding/setup', data),
+  setup: (data: {
+    buId?: string; buName?: string;
+    teamId?: string; teamName?: string;
+    groupId?: string; groupName?: string;
+    partId?: string; partName?: string;
+    isDirect?: boolean; isGroupDirect?: boolean;
+    adminRole?: string | null;
+  }) => api.post('/onboarding/setup', data),
 };
 
 // ==================== WorkLogs ====================

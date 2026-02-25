@@ -86,13 +86,14 @@ function InlineInput({ defaultValue, placeholder, onSubmit, onCancel }: {
 
 // ── 편집 가능 노드 카드 ──────────────────────────────────
 
-function EditableNodeCard({ node, canEdit, canDelete, canCreate, onRename, onCreate, onDelete }: {
+function EditableNodeCard({ node, canEdit, canDelete, canCreate, onRename, onCreate, onCreateDirect, onDelete }: {
   node: OrgNode;
   canEdit: boolean;
   canDelete: boolean;
   canCreate: boolean;
   onRename: (id: string, type: OrgNode['type'], currentName: string) => void;
   onCreate: (parentId: string, parentType: OrgNode['type']) => void;
+  onCreateDirect: (parentId: string, parentType: OrgNode['type']) => void;
   onDelete: (id: string, type: OrgNode['type'], name: string) => void;
 }) {
   const typeLabel = { BU: '사업부', TEAM: '팀', GROUP: '그룹', PART: '파트' }[node.type];
@@ -123,13 +124,22 @@ function EditableNodeCard({ node, canEdit, canDelete, canCreate, onRename, onCre
 
       {/* + 버튼 (하위 생성) */}
       {canCreate && (node.type === 'TEAM' || node.type === 'GROUP') && (
-        <button
-          onClick={() => onCreate(node.id, node.type)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 text-xs"
-          title={node.type === 'TEAM' ? '그룹 추가' : '파트 추가'}
-        >
-          +
-        </button>
+        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onCreate(node.id, node.type)}
+            className="w-5 h-5 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 text-xs"
+            title={node.type === 'TEAM' ? '그룹 추가' : '파트 추가'}
+          >
+            +
+          </button>
+          <button
+            onClick={() => onCreateDirect(node.id, node.type)}
+            className="px-1.5 h-5 flex items-center justify-center rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200 text-[10px] font-medium"
+            title="직속 추가"
+          >
+            직속
+          </button>
+        </div>
       )}
 
       {/* x 버튼 (빈 노드 삭제) */}
@@ -283,6 +293,24 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
 
   const handleCreate = (parentId: string, parentType: OrgNode['type']) => {
     setCreating({ parentId, parentType });
+  };
+
+  const handleCreateDirect = (parentId: string, parentType: OrgNode['type']) => {
+    const childType = parentType === 'TEAM' ? '그룹' : '파트';
+    setConfirm({
+      message: `'직속' ${childType}을(를) 생성하시겠습니까?`,
+      action: async () => {
+        if (parentType === 'TEAM') {
+          const res = await orgApi.createGroup(parentId, '직속');
+          // 직속 그룹 아래에 직속 파트도 자동 생성
+          await orgApi.createPart(res.data.group.id, '직속');
+        } else if (parentType === 'GROUP') {
+          await orgApi.createPart(parentId, '직속');
+        }
+        await fetchTree();
+        onRefresh();
+      },
+    });
   };
 
   const submitCreate = (name: string) => {
@@ -439,6 +467,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
                     canCreate={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
                     onRename={handleRename}
                     onCreate={handleCreate}
+                    onCreateDirect={handleCreateDirect}
                     onDelete={handleDelete}
                   />
                 )}
@@ -502,6 +531,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
                 canCreate={false}
                 onRename={handleRename}
                 onCreate={handleCreate}
+                onCreateDirect={handleCreateDirect}
                 onDelete={handleDelete}
               />
 
@@ -533,6 +563,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
                             canCreate={canEditGroup}
                             onRename={handleRename}
                             onCreate={handleCreate}
+                            onCreateDirect={handleCreateDirect}
                             onDelete={handleDelete}
                           />
                           {renderGroupsBranch(team)}
@@ -553,6 +584,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
                 canCreate={canEditGroup}
                 onRename={handleRename}
                 onCreate={handleCreate}
+                onCreateDirect={handleCreateDirect}
                 onDelete={handleDelete}
               />
               {renderGroupsBranch(tree)}

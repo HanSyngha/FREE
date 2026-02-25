@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { teamAdminApi, adminApi, spacesApi } from '../services/api';
+import { teamAdminApi, adminApi, spacesApi, orgAdminApi } from '../services/api';
 import OrgChartEditable from '../components/admin/OrgChartEditable';
 
 type Tab = 'org' | 'tools' | 'users' | 'logs';
@@ -56,6 +56,9 @@ export default function OrgAdmin() {
 
   // 로그 탭
   const [logs, setLogs] = useState<any[]>([]);
+
+  // 부서장 지정
+  const [roleDropdown, setRoleDropdown] = useState<string | null>(null); // userId
 
   // 관리 도구 탭
   const [triggeringReport, setTriggeringReport] = useState(false);
@@ -127,6 +130,31 @@ export default function OrgAdmin() {
     } catch (err: any) {
       setTriggerMsg({ type: 'error', text: err.response?.data?.error || '진행률 업데이트에 실패했습니다.' });
     } finally { setTriggeringProgress(false); }
+  };
+
+  const getRoleLabel = (orgAdmins: Array<{ level: string }>) => {
+    if (!orgAdmins?.length) return null;
+    const labels: Record<string, string> = { BU: '사업부장', TEAM: '팀장', GROUP: '그룹장', PART: '파트장' };
+    return orgAdmins.map(oa => labels[oa.level] || oa.level).join(', ');
+  };
+
+  const handleAssignRole = async (userId: string, level: string, targetId: string) => {
+    try {
+      await orgAdminApi.create(userId, level, targetId);
+      fetchUsers(filterGroupId, filterPartId);
+    } catch (err: any) {
+      alert(err.response?.data?.error || '부서장 지정에 실패했습니다.');
+    }
+    setRoleDropdown(null);
+  };
+
+  const handleRemoveRole = async (orgAdminId: string) => {
+    try {
+      await orgAdminApi.delete(orgAdminId);
+      fetchUsers(filterGroupId, filterPartId);
+    } catch {
+      alert('부서장 해제에 실패했습니다.');
+    }
   };
 
   if (!canAccess) return null;
@@ -219,22 +247,63 @@ export default function OrgAdmin() {
                 <th scope="col" className="pb-2">ID</th>
                 <th scope="col" className="pb-2">그룹</th>
                 <th scope="col" className="pb-2">파트</th>
+                <th scope="col" className="pb-2">역할</th>
                 <th scope="col" className="pb-2">마지막 활동</th>
               </tr></thead>
               <tbody>
-                {users.map(u => (
-                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2">{u.username}</td>
-                    <td className="py-2 text-gray-500">{u.loginid}</td>
-                    <td className="py-2 text-gray-500">{u.group?.name || '-'}</td>
-                    <td className="py-2 text-gray-500">{u.part?.name || '-'}</td>
-                    <td className="py-2 text-gray-400 text-xs">
-                      {u.lastActive ? new Date(u.lastActive).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}
-                    </td>
-                  </tr>
-                ))}
+                {users.map(u => {
+                  const roleLabel = getRoleLabel(u.orgAdmins);
+                  return (
+                    <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="py-2">{u.username}</td>
+                      <td className="py-2 text-gray-500">{u.loginid}</td>
+                      <td className="py-2 text-gray-500">{u.group?.name || '-'}</td>
+                      <td className="py-2 text-gray-500">{u.part?.name || '-'}</td>
+                      <td className="py-2 relative">
+                        {roleLabel ? (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-xs font-medium text-primary-700 bg-primary-50 px-1.5 py-0.5 rounded">{roleLabel}</span>
+                            {u.orgAdmins.map((oa: any) => (
+                              <button key={oa.id} onClick={() => handleRemoveRole(oa.id)}
+                                className="text-red-400 hover:text-red-600 text-xs" title="해제">x</button>
+                            ))}
+                          </span>
+                        ) : (
+                          <div className="relative inline-block">
+                            <button onClick={() => setRoleDropdown(roleDropdown === u.id ? null : u.id)}
+                              className="text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 px-1.5 py-0.5 rounded transition-colors">
+                              + 지정
+                            </button>
+                            {roleDropdown === u.id && (
+                              <div className="absolute z-10 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px]">
+                                {[
+                                  { level: 'BU', label: '사업부장', targetId: user?.businessUnitId },
+                                  { level: 'TEAM', label: '팀장', targetId: u.teamId || teamId },
+                                  { level: 'GROUP', label: '그룹장', targetId: u.groupId },
+                                  { level: 'PART', label: '파트장', targetId: u.partId },
+                                ].filter(r => r.targetId).map(r => (
+                                  <button key={r.level} onClick={() => handleAssignRole(u.id, r.level, r.targetId!)}
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary-50 text-gray-700 hover:text-primary-700">
+                                    {r.label}
+                                  </button>
+                                ))}
+                                <button onClick={() => setRoleDropdown(null)}
+                                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-400">
+                                  취소
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 text-gray-400 text-xs">
+                        {u.lastActive ? new Date(u.lastActive).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {users.length === 0 && (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-400">사용자가 없습니다</td></tr>
+                  <tr><td colSpan={6} className="py-8 text-center text-gray-400">사용자가 없습니다</td></tr>
                 )}
               </tbody>
             </table>

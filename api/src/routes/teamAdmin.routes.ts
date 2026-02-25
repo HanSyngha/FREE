@@ -40,6 +40,7 @@ teamAdminRoutes.get('/users', authenticateToken, requireTeamAdminOrHigher, loadU
       include: {
         group: { select: { id: true, name: true } },
         part: { select: { id: true, name: true } },
+        orgAdmins: { select: { id: true, level: true, targetId: true } },
       },
       orderBy: { username: 'asc' },
     });
