@@ -71,6 +71,61 @@ orgRoutes.get('/tree', authenticateToken, async (req: AuthenticatedRequest, res)
     const user = await resolveUser(req);
     if (!user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
+    // BU-level tree (SuperAdmin 사업부 전체 조회)
+    const buId = req.query.buId as string;
+    if (buId) {
+      const bu = await prisma.businessUnit.findUnique({
+        where: { id: buId },
+        include: {
+          teams: {
+            orderBy: { name: 'asc' },
+            include: {
+              groups: {
+                orderBy: { name: 'asc' },
+                include: {
+                  parts: {
+                    orderBy: { name: 'asc' },
+                    include: { _count: { select: { users: true } } },
+                  },
+                  _count: { select: { users: true } },
+                },
+              },
+              _count: { select: { users: true } },
+            },
+          },
+        },
+      });
+      if (!bu) { res.status(404).json({ error: 'Business unit not found' }); return; }
+
+      const tree = {
+        id: bu.id,
+        name: bu.name,
+        type: 'BU' as const,
+        children: bu.teams.map(team => ({
+          id: team.id,
+          name: team.name,
+          type: 'TEAM' as const,
+          memberCount: team._count.users,
+          children: team.groups.map(g => ({
+            id: g.id,
+            name: g.name,
+            type: 'GROUP' as const,
+            memberCount: g._count.users,
+            children: g.parts.map(p => ({
+              id: p.id,
+              name: p.name,
+              type: 'PART' as const,
+              memberCount: p._count.users,
+              children: [] as any[],
+            })),
+          })),
+        })),
+      };
+      res.json({ tree });
+      return;
+    }
+
+    // Single team tree
     const teamId = (req.query.teamId as string) || user.teamId;
     if (!teamId) { res.status(400).json({ error: 'Team not assigned' }); return; }
 

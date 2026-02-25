@@ -102,7 +102,12 @@ export const orgAdminApi = {
 
 // ==================== Org Management ====================
 export const orgApi = {
-  getTree: (teamId?: string) => api.get('/org/tree', { params: teamId ? { teamId } : {} }),
+  getTree: (teamId?: string, buId?: string) => {
+    const params: Record<string, string> = {};
+    if (teamId) params.teamId = teamId;
+    if (buId) params.buId = buId;
+    return api.get('/org/tree', { params });
+  },
   createGroup: (teamId: string, name: string) => api.post('/org/groups', { teamId, name }),
   renameGroup: (id: string, name: string) => api.put(`/org/groups/${id}`, { name }),
   deleteGroup: (id: string) => api.delete(`/org/groups/${id}`),

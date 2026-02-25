@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { authenticateToken, AuthenticatedRequest, loadUser } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest, loadUser, isSuperAdmin } from '../middleware/auth.js';
 import { generalLimit } from '../middleware/rateLimit.js';
 import { getKSTTodayForDB } from '../utils/date.js';
 
@@ -68,7 +68,7 @@ spaceRoutes.get('/personal/:userId', authenticateToken, loadUser, generalLimit, 
     });
     if (!targetUser) { res.status(404).json({ error: 'User not found' }); return; }
 
-    if (targetUser.teamId !== currentUser.teamId) {
+    if (targetUser.teamId !== currentUser.teamId && !isSuperAdmin(currentUser.loginid)) {
       res.status(403).json({ error: '같은 팀의 사용자만 조회할 수 있습니다.' });
       return;
     }
@@ -112,7 +112,7 @@ spaceRoutes.get('/part/:partId', authenticateToken, loadUser, generalLimit, asyn
     });
     if (!part) { res.status(404).json({ error: 'Part not found' }); return; }
 
-    if (part.group.teamId !== currentUser.teamId) {
+    if (part.group.teamId !== currentUser.teamId && !isSuperAdmin(currentUser.loginid)) {
       res.status(403).json({ error: '같은 팀의 파트만 조회할 수 있습니다.' });
       return;
     }
@@ -178,7 +178,7 @@ spaceRoutes.get('/group/:groupId', authenticateToken, loadUser, generalLimit, as
     });
     if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
 
-    if (group.teamId !== currentUser.teamId) {
+    if (group.teamId !== currentUser.teamId && !isSuperAdmin(currentUser.loginid)) {
       res.status(403).json({ error: '같은 팀의 그룹만 조회할 수 있습니다.' });
       return;
     }

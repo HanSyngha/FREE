@@ -73,6 +73,7 @@ export default function OrgAdmin() {
   const title = getAdminTitle(isSuperAdmin, isTeamAdmin, orgAdminLevels);
   const editLevel = getEditLevel(isSuperAdmin, isTeamAdmin, orgAdminLevels);
   const editTargetId = orgAdminLevels[0]?.level === 'GROUP' ? orgAdminLevels[0]?.targetId : undefined;
+  const buId = isSuperAdmin && user?.businessUnitId ? user.businessUnitId : null;
 
   // 사용자 fetcher
   const fetchUsers = (groupId?: string, partId?: string) => {
@@ -140,7 +141,10 @@ export default function OrgAdmin() {
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-xl font-bold text-gray-900 mb-1">{title}</h1>
-      {teamName && <p className="text-sm text-gray-500 mb-4">{teamName}</p>}
+      {buId
+        ? user?.businessUnitName && <p className="text-sm text-gray-500 mb-4">{user.businessUnitName}</p>
+        : teamName && <p className="text-sm text-gray-500 mb-4">{teamName}</p>
+      }
 
       {/* 탭 */}
       <div className="flex gap-2 mb-6" role="tablist">
@@ -155,10 +159,11 @@ export default function OrgAdmin() {
       </div>
 
       {/* 조직도 탭 */}
-      {tab === 'org' && teamId && (
+      {tab === 'org' && (buId || teamId) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <OrgChartEditable
-            teamId={teamId}
+            teamId={buId ? undefined : teamId!}
+            buId={buId || undefined}
             editLevel={editLevel}
             editTargetId={editTargetId}
             onRefresh={() => {}}

@@ -1,19 +1,22 @@
 /**
  * OrgChartEditable - 편집 가능 조직도 (이름수정/생성/삭제/사용자 재배치)
+ * BU view (buId): BU → Teams → Groups → Parts
+ * Team view (teamId): Team → Groups → Parts
  */
 import { useState, useEffect, useRef } from 'react';
 import { orgApi, teamAdminApi } from '../../services/api';
 import type { OrgNode } from '../common/OrgChart';
 
 interface OrgChartEditableProps {
-  teamId: string;
+  teamId?: string;
+  buId?: string;
   editLevel: 'BU' | 'TEAM' | 'GROUP' | 'PART';
   editTargetId?: string;
   onRefresh: () => void;
 }
 
 interface TreeData {
-  tree: OrgNode & { children: (OrgNode & { children: OrgNode[] })[] };
+  tree: OrgNode;
 }
 
 interface UserItem {
@@ -187,8 +190,6 @@ function DroppablePartNode({ node, canEdit, canDelete, onRename, onDelete, onDro
         const userName = e.dataTransfer.getData('userName');
         const fromGroup = e.dataTransfer.getData('fromGroup');
         const fromPart = e.dataTransfer.getData('fromPart');
-        // parent group ID는 tree data에서 가져와야 함 → prop으로 전달 필요
-        // 여기서는 콜백에 partId 전달, 부모에서 groupId 결정
         onDrop(userId, userName, `${fromGroup}/${fromPart}`, node.id, '', node.name);
       }}
       className="flex items-center gap-1 group"
@@ -226,7 +227,7 @@ function DroppablePartNode({ node, canEdit, canDelete, onRename, onDelete, onDro
 
 // ── 메인 컴포넌트 ──────────────────────────────────────
 
-export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRefresh }: OrgChartEditableProps) {
+export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId, onRefresh }: OrgChartEditableProps) {
   const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,22 +238,27 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
   const [creating, setCreating] = useState<{ parentId: string; parentType: OrgNode['type'] } | null>(null);
   const [confirm, setConfirm] = useState<{ message: string; action: () => Promise<void> } | null>(null);
 
+  const isBUView = !!buId;
   const canEditGroup = editLevel === 'BU' || editLevel === 'TEAM';
   const canEditSubGroup = editLevel === 'BU' || editLevel === 'TEAM' || editLevel === 'GROUP';
 
   const fetchTree = async () => {
     try {
-      const [treeRes, usersRes] = await Promise.all([
-        orgApi.getTree(teamId),
-        teamAdminApi.getUsers(),
-      ]);
+      const treeRes = buId
+        ? await orgApi.getTree(undefined, buId)
+        : await orgApi.getTree(teamId);
       setTreeData(treeRes.data);
-      setUsers(usersRes.data.users || []);
+
+      // 사용자 목록은 단일 팀 뷰에서만 로드 (BU 뷰에서는 드래그 미지원)
+      if (!buId) {
+        const usersRes = await teamAdminApi.getUsers();
+        setUsers(usersRes.data.users || []);
+      }
     } catch { setError('조직도를 불러올 수 없습니다.'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchTree(); }, [teamId]);
+  useEffect(() => { fetchTree(); }, [teamId, buId]);
 
   // ── 핸들러 ──────────────────────────────────────────
 
@@ -309,13 +315,22 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
   };
 
   const handleUserDrop = (userId: string, userName: string, fromInfo: string, toPartId: string, _toGroupId: string, toPartName: string) => {
-    // tree에서 파트의 부모 그룹을 찾기
+    // tree에서 파트의 부모 그룹을 찾기 (BU view와 Team view 모두 지원)
     let groupId = '';
     if (treeData) {
-      for (const g of treeData.tree.children) {
-        if (g.children.some(p => p.id === toPartId)) {
-          groupId = g.id;
-          break;
+      const tree = treeData.tree;
+      if (isBUView) {
+        // BU → Teams → Groups → Parts
+        for (const team of tree.children || []) {
+          for (const group of team.children || []) {
+            if (group.children?.some(p => p.id === toPartId)) { groupId = group.id; break; }
+          }
+          if (groupId) break;
+        }
+      } else {
+        // Team → Groups → Parts
+        for (const g of tree.children || []) {
+          if (g.children?.some(p => p.id === toPartId)) { groupId = g.id; break; }
         }
       }
     }
@@ -341,6 +356,123 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
     setConfirm(null);
   };
 
+  // ── 렌더 헬퍼: 파트 브랜치 ──────────────────────────
+
+  const renderPartsBranch = (group: OrgNode) => {
+    const parts = group.children || [];
+    if (parts.length === 0 && !(creating?.parentId === group.id && creating?.parentType === 'GROUP')) return null;
+
+    return (
+      <div className="flex items-stretch">
+        <div className="flex flex-col justify-center w-6 shrink-0">
+          <div className="border-t border-gray-300 w-full" />
+        </div>
+        <div className="flex flex-col gap-2">
+          {parts.map((part, pi) => (
+            <div key={part.id} className="flex items-center">
+              {parts.length > 1 && (
+                <div className="relative w-3 self-stretch shrink-0">
+                  <div className={`absolute left-0 border-l border-gray-300 ${
+                    pi === 0 ? 'top-1/2 bottom-0' :
+                    pi === parts.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
+                  }`} />
+                  <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
+                </div>
+              )}
+
+              {renaming?.id === part.id ? (
+                <InlineInput defaultValue={renaming.name} onSubmit={submitRename} onCancel={() => setRenaming(null)} />
+              ) : (
+                <DroppablePartNode
+                  node={part}
+                  canEdit={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
+                  canDelete={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  onDrop={handleUserDrop}
+                />
+              )}
+            </div>
+          ))}
+
+          {creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
+            <InlineInput placeholder="파트 이름" onSubmit={submitCreate} onCancel={() => setCreating(null)} />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── 렌더 헬퍼: 그룹 브랜치 (한 팀의 그룹→파트) ────────
+
+  const renderGroupsBranch = (teamNode: OrgNode) => {
+    const groups = teamNode.children || [];
+    const hasCreating = creating?.parentId === teamNode.id && creating?.parentType === 'TEAM';
+    if (groups.length === 0 && !hasCreating) return null;
+
+    return (
+      <div className="flex items-stretch">
+        <div className="flex flex-col justify-center w-6 shrink-0">
+          <div className="border-t border-gray-300 w-full" />
+        </div>
+        <div className="flex flex-col gap-3">
+          {groups.map((group, gi) => (
+            <div key={group.id} className="flex items-start">
+              {groups.length > 1 && (
+                <div className="relative w-3 self-stretch shrink-0">
+                  <div className={`absolute left-0 border-l border-gray-300 ${
+                    gi === 0 ? 'top-[14px] bottom-0' :
+                    gi === groups.length - 1 ? 'top-0 bottom-[calc(100%-14px)]' : 'top-0 bottom-0'
+                  }`} />
+                  <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                </div>
+              )}
+
+              <div className="flex items-start">
+                {renaming?.id === group.id ? (
+                  <InlineInput defaultValue={renaming.name} onSubmit={submitRename} onCancel={() => setRenaming(null)} />
+                ) : (
+                  <EditableNodeCard
+                    node={group}
+                    canEdit={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
+                    canDelete={canEditGroup}
+                    canCreate={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
+                    onRename={handleRename}
+                    onCreate={handleCreate}
+                    onDelete={handleDelete}
+                  />
+                )}
+
+                {renderPartsBranch(group)}
+
+                {/* 파트가 없을 때 새 파트 생성 */}
+                {(group.children?.length ?? 0) === 0 && creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
+                  <div className="flex items-center">
+                    <div className="w-6 border-t border-gray-300" />
+                    <InlineInput placeholder="파트 이름" onSubmit={submitCreate} onCancel={() => setCreating(null)} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* 새 그룹 생성 인라인 */}
+          {hasCreating && (
+            <div className="flex items-center">
+              {groups.length > 0 && (
+                <div className="relative w-3 self-stretch shrink-0">
+                  <div className="absolute left-0 top-0 bottom-[calc(100%-14px)] border-l border-gray-300" />
+                  <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                </div>
+              )}
+              <InlineInput placeholder="그룹 이름" onSubmit={submitCreate} onCancel={() => setCreating(null)} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── 렌더링 ──────────────────────────────────────────
 
   if (loading) return <div className="flex justify-center py-8"><div className="w-6 h-6 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" /></div>;
@@ -360,158 +492,85 @@ export default function OrgChartEditable({ teamId, editLevel, editTargetId, onRe
       {/* 조직도 트리 */}
       <div className="overflow-x-auto">
         <div className="flex items-start min-w-fit py-3 gap-0">
-          {/* 팀 노드 */}
-          <EditableNodeCard
-            node={tree}
-            canEdit={false}
-            canDelete={false}
-            canCreate={canEditGroup}
-            onRename={handleRename}
-            onCreate={handleCreate}
-            onDelete={handleDelete}
-          />
-
-          {/* 연결선 → 그룹들 */}
-          {tree.children.length > 0 && (
-            <div className="flex items-stretch">
-              <div className="flex flex-col justify-center w-6 shrink-0">
-                <div className="border-t border-gray-300 w-full" />
-              </div>
-              <div className="flex flex-col gap-3">
-                {tree.children.map((group, gi) => (
-                  <div key={group.id} className="flex items-start">
-                    {/* 세로 연결선 (그룹간) */}
-                    {tree.children.length > 1 && (
-                      <div className="relative w-3 self-stretch shrink-0">
-                        <div className={`absolute left-0 border-l border-gray-300 ${
-                          gi === 0 ? 'top-[14px] bottom-0' :
-                          gi === tree.children.length - 1 ? 'top-0 bottom-[calc(100%-14px)]' : 'top-0 bottom-0'
-                        }`} />
-                        <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
-                      </div>
-                    )}
-
-                    <div className="flex items-start">
-                      {/* 그룹 카드 (renaming 중이면 input) */}
-                      {renaming?.id === group.id ? (
-                        <InlineInput
-                          defaultValue={renaming.name}
-                          onSubmit={submitRename}
-                          onCancel={() => setRenaming(null)}
-                        />
-                      ) : (
-                        <EditableNodeCard
-                          node={group}
-                          canEdit={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
-                          canDelete={canEditGroup}
-                          canCreate={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
-                          onRename={handleRename}
-                          onCreate={handleCreate}
-                          onDelete={handleDelete}
-                        />
-                      )}
-
-                      {/* 연결선 → 파트들 */}
-                      {(group.children?.length ?? 0) > 0 && (
-                        <div className="flex items-stretch">
-                          <div className="flex flex-col justify-center w-6 shrink-0">
-                            <div className="border-t border-gray-300 w-full" />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            {group.children!.map((part, pi) => (
-                              <div key={part.id} className="flex items-center">
-                                {group.children!.length > 1 && (
-                                  <div className="relative w-3 self-stretch shrink-0">
-                                    <div className={`absolute left-0 border-l border-gray-300 ${
-                                      pi === 0 ? 'top-1/2 bottom-0' :
-                                      pi === group.children!.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
-                                    }`} />
-                                    <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
-                                  </div>
-                                )}
-
-                                {renaming?.id === part.id ? (
-                                  <InlineInput
-                                    defaultValue={renaming.name}
-                                    onSubmit={submitRename}
-                                    onCancel={() => setRenaming(null)}
-                                  />
-                                ) : (
-                                  <DroppablePartNode
-                                    node={part}
-                                    canEdit={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
-                                    canDelete={canEditSubGroup && (editLevel !== 'GROUP' || editTargetId === group.id)}
-                                    onRename={handleRename}
-                                    onDelete={handleDelete}
-                                    onDrop={handleUserDrop}
-                                  />
-                                )}
-                              </div>
-                            ))}
-
-                            {/* 새 파트 생성 인라인 */}
-                            {creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
-                              <InlineInput
-                                placeholder="파트 이름"
-                                onSubmit={submitCreate}
-                                onCancel={() => setCreating(null)}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 파트가 없을 때 새 파트 생성 */}
-                      {(group.children?.length ?? 0) === 0 && creating?.parentId === group.id && creating?.parentType === 'GROUP' && (
-                        <div className="flex items-center">
-                          <div className="w-6 border-t border-gray-300" />
-                          <InlineInput
-                            placeholder="파트 이름"
-                            onSubmit={submitCreate}
-                            onCancel={() => setCreating(null)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {/* 새 그룹 생성 인라인 */}
-                {creating?.parentId === tree.id && creating?.parentType === 'TEAM' && (
-                  <div className="flex items-center">
-                    {tree.children.length > 0 && (
-                      <div className="relative w-3 self-stretch shrink-0">
-                        <div className="absolute left-0 top-0 bottom-[calc(100%-14px)] border-l border-gray-300" />
-                        <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
-                      </div>
-                    )}
-                    <InlineInput
-                      placeholder="그룹 이름"
-                      onSubmit={submitCreate}
-                      onCancel={() => setCreating(null)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 그룹이 없을 때 새 그룹 생성 */}
-          {tree.children.length === 0 && creating?.parentId === tree.id && creating?.parentType === 'TEAM' && (
-            <div className="flex items-center">
-              <div className="w-6 border-t border-gray-300" />
-              <InlineInput
-                placeholder="그룹 이름"
-                onSubmit={submitCreate}
-                onCancel={() => setCreating(null)}
+          {isBUView ? (
+            <>
+              {/* BU root */}
+              <EditableNodeCard
+                node={tree}
+                canEdit={false}
+                canDelete={false}
+                canCreate={false}
+                onRename={handleRename}
+                onCreate={handleCreate}
+                onDelete={handleDelete}
               />
-            </div>
+
+              {/* Teams branch */}
+              {(tree.children?.length ?? 0) > 0 && (
+                <div className="flex items-stretch">
+                  <div className="flex flex-col justify-center w-6 shrink-0">
+                    <div className="border-t border-gray-300 w-full" />
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    {tree.children!.map((team, ti) => (
+                      <div key={team.id} className="flex items-start">
+                        {/* 팀 간 세로 연결선 */}
+                        {tree.children!.length > 1 && (
+                          <div className="relative w-3 self-stretch shrink-0">
+                            <div className={`absolute left-0 border-l border-gray-300 ${
+                              ti === 0 ? 'top-[14px] bottom-0' :
+                              ti === tree.children!.length - 1 ? 'top-0 bottom-[calc(100%-14px)]' : 'top-0 bottom-0'
+                            }`} />
+                            <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                          </div>
+                        )}
+
+                        <div className="flex items-start">
+                          <EditableNodeCard
+                            node={team}
+                            canEdit={false}
+                            canDelete={false}
+                            canCreate={canEditGroup}
+                            onRename={handleRename}
+                            onCreate={handleCreate}
+                            onDelete={handleDelete}
+                          />
+                          {renderGroupsBranch(team)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Team root */}
+              <EditableNodeCard
+                node={tree}
+                canEdit={false}
+                canDelete={false}
+                canCreate={canEditGroup}
+                onRename={handleRename}
+                onCreate={handleCreate}
+                onDelete={handleDelete}
+              />
+              {renderGroupsBranch(tree)}
+
+              {/* 그룹이 없을 때 새 그룹 생성 */}
+              {(tree.children?.length ?? 0) === 0 && creating?.parentId === tree.id && creating?.parentType === 'TEAM' && (
+                <div className="flex items-center">
+                  <div className="w-6 border-t border-gray-300" />
+                  <InlineInput placeholder="그룹 이름" onSubmit={submitCreate} onCancel={() => setCreating(null)} />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* 사용자 목록 (드래그 소스) */}
-      {canEditSubGroup && users.length > 0 && (
+      {/* 사용자 목록 (드래그 소스) — 단일 팀 뷰에서만 */}
+      {!isBUView && canEditSubGroup && users.length > 0 && (
         <div>
           <h3 className="text-xs font-semibold text-gray-500 mb-2">
             팀원 ({users.length}명) — 파트 노드로 드래그하여 재배치

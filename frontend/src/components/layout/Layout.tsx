@@ -1,8 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import { authApi } from '../../services/api';
+import { authApi, spacesApi, orgApi } from '../../services/api';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { spacesApi } from '../../services/api';
 
 function getAdminLabel(isSuperAdmin: boolean, isTeamAdmin: boolean, orgAdminLevels: Array<{ level: string }>) {
   if (isSuperAdmin) return '사업부 관리';
@@ -23,11 +22,29 @@ export default function Layout() {
   const navigate = useNavigate();
   const [sidebarData, setSidebarData] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [buTree, setBuTree] = useState<any>(null);
+  const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
+
+  const togglePart = (partId: string) => {
+    setExpandedParts(prev => {
+      const next = new Set(prev);
+      if (next.has(partId)) next.delete(partId);
+      else next.add(partId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     spacesApi.getTeam().then(res => {
       setSidebarData(res.data);
     }).catch(() => {});
+
+    // SuperAdmin: BU 전체 트리 로드 (다른 팀 표시용)
+    if (isSuperAdmin && user?.businessUnitId) {
+      orgApi.getTree(undefined, user.businessUnitId).then(res => {
+        setBuTree(res.data.tree);
+      }).catch(() => {});
+    }
   }, []);
 
   const handleLogout = async () => {
@@ -162,19 +179,32 @@ export default function Layout() {
                         </NavLink>
                         {group.parts?.map((part: any) => {
                           const isMyPart = user?.partId === part.id;
+                          const isExpanded = expandedParts.has(part.id);
+                          const userCount = part.users?.length || 0;
                           return (
                             <div key={part.id}>
-                              <NavLink to={`/space/part/${part.id}`} className={({ isActive }) =>
-                                `block pl-10 pr-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                                  isActive ? 'bg-primary-50 text-primary-600 font-medium'
-                                    : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
-                                    : 'text-gray-500 hover:bg-gray-50'
-                                }`
-                              }>
-                                {part.name}
-                                {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
-                              </NavLink>
-                              {part.users?.map((u: any) => {
+                              <div className="flex items-center">
+                                <NavLink to={`/space/part/${part.id}`} className={({ isActive }) =>
+                                  `flex-1 block pl-10 pr-1 py-1.5 rounded-lg text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                                    isActive ? 'bg-primary-50 text-primary-600 font-medium'
+                                      : isMyPart ? 'text-primary-500 font-medium hover:bg-primary-50'
+                                      : 'text-gray-500 hover:bg-gray-50'
+                                  }`
+                                }>
+                                  {part.name}
+                                  {isMyPart && <span className="ml-1 text-[10px] text-primary-300">내 파트</span>}
+                                </NavLink>
+                                {userCount > 0 && (
+                                  <button
+                                    onClick={() => togglePart(part.id)}
+                                    className="px-1.5 py-1 text-[10px] text-gray-400 hover:text-gray-600 shrink-0"
+                                    title={isExpanded ? '접기' : '펼치기'}
+                                  >
+                                    {isExpanded ? '▼' : '▶'} {userCount}
+                                  </button>
+                                )}
+                              </div>
+                              {isExpanded && part.users?.map((u: any) => {
                                 const isMe = user?.id === u.id;
                                 if (isMe) {
                                   return (
@@ -206,6 +236,38 @@ export default function Layout() {
                   })}
                 </div>
               )}
+
+              {/* SuperAdmin: 동일 BU 내 다른 팀 */}
+              {buTree && sidebarData?.team && buTree.children?.filter((t: any) => t.id !== sidebarData.team.id).map((otherTeam: any) => (
+                <div key={otherTeam.id} className="mb-3">
+                  <div className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 cursor-default">
+                    {otherTeam.name}
+                    <span className="ml-1 text-[10px] text-gray-400">{otherTeam.memberCount}명</span>
+                  </div>
+                  {otherTeam.children?.map((group: any) => (
+                    <div key={group.id} className="mt-1">
+                      <NavLink to={`/space/group/${group.id}`} className={({ isActive }) =>
+                        `block pl-6 pr-3 py-1.5 rounded-lg text-sm transition-colors text-gray-500 hover:bg-gray-100 ${
+                          isActive ? 'bg-primary-100 text-primary-700 font-medium' : ''
+                        }`
+                      }>
+                        {group.name}
+                        <span className="ml-1 text-[10px] text-gray-400">{group.memberCount}명</span>
+                      </NavLink>
+                      {group.children?.map((part: any) => (
+                        <NavLink key={part.id} to={`/space/part/${part.id}`} className={({ isActive }) =>
+                          `block pl-10 pr-3 py-1.5 rounded-lg text-xs transition-colors text-gray-400 hover:bg-gray-50 ${
+                            isActive ? 'bg-primary-50 text-primary-600 font-medium' : ''
+                          }`
+                        }>
+                          {part.name}
+                          <span className="ml-1 text-[10px] text-gray-300">{part.memberCount}명</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
 
               {/* Admin 메뉴 */}
               {(isSuperAdmin || isTeamAdmin || orgAdminLevels.length > 0) && (
