@@ -443,18 +443,18 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
         </div>
         <div className="flex flex-col gap-3">
           {groups.map((group, gi) => (
-            <div key={group.id} className="flex items-start">
+            <div key={group.id} className="flex items-center">
               {groups.length > 1 && (
                 <div className="relative w-3 self-stretch shrink-0">
                   <div className={`absolute left-0 border-l border-gray-300 ${
-                    gi === 0 ? 'top-[14px] bottom-0' :
-                    gi === groups.length - 1 ? 'top-0 bottom-[calc(100%-14px)]' : 'top-0 bottom-0'
+                    gi === 0 ? 'top-1/2 bottom-0' :
+                    gi === groups.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
                   }`} />
-                  <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                  <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
                 </div>
               )}
 
-              <div className="flex items-start">
+              <div className="flex items-center">
                 {renaming?.id === group.id ? (
                   <InlineInput defaultValue={renaming.name} onSubmit={submitRename} onCancel={() => setRenaming(null)} />
                 ) : (
@@ -488,8 +488,8 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
             <div className="flex items-center">
               {groups.length > 0 && (
                 <div className="relative w-3 self-stretch shrink-0">
-                  <div className="absolute left-0 top-0 bottom-[calc(100%-14px)] border-l border-gray-300" />
-                  <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                  <div className="absolute left-0 top-0 bottom-1/2 border-l border-gray-300" />
+                  <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
                 </div>
               )}
               <InlineInput placeholder="그룹 이름" onSubmit={submitCreate} onCancel={() => setCreating(null)} />
@@ -518,7 +518,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
 
       {/* 조직도 트리 */}
       <div className="overflow-x-auto">
-        <div className="flex items-start min-w-fit py-3 gap-0">
+        <div className="flex items-center min-w-fit py-3 gap-0">
           {isBUView ? (
             <>
               {/* BU root */}
@@ -541,19 +541,19 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
                   </div>
                   <div className="flex flex-col gap-4">
                     {tree.children!.map((team, ti) => (
-                      <div key={team.id} className="flex items-start">
+                      <div key={team.id} className="flex items-center">
                         {/* 팀 간 세로 연결선 */}
                         {tree.children!.length > 1 && (
                           <div className="relative w-3 self-stretch shrink-0">
                             <div className={`absolute left-0 border-l border-gray-300 ${
-                              ti === 0 ? 'top-[14px] bottom-0' :
-                              ti === tree.children!.length - 1 ? 'top-0 bottom-[calc(100%-14px)]' : 'top-0 bottom-0'
+                              ti === 0 ? 'top-1/2 bottom-0' :
+                              ti === tree.children!.length - 1 ? 'top-0 bottom-1/2' : 'top-0 bottom-0'
                             }`} />
-                            <div className="absolute top-[14px] left-0 w-full border-t border-gray-300" />
+                            <div className="absolute top-1/2 left-0 w-full border-t border-gray-300" />
                           </div>
                         )}
 
-                        <div className="flex items-start">
+                        <div className="flex items-center">
                           <EditableNodeCard
                             node={team}
                             canEdit={false}
