@@ -32,8 +32,8 @@ orgAdminRoutes.post('/', authenticateToken, requireTeamAdminOrHigher, async (req
       res.status(400).json({ error: 'userId, level, targetId는 필수입니다.' });
       return;
     }
-    if (!['TEAM', 'GROUP', 'PART'].includes(level)) {
-      res.status(400).json({ error: 'level은 TEAM/GROUP/PART 중 하나여야 합니다.' });
+    if (!['BU', 'TEAM', 'GROUP', 'PART'].includes(level)) {
+      res.status(400).json({ error: 'level은 BU/TEAM/GROUP/PART 중 하나여야 합니다.' });
       return;
     }
 
