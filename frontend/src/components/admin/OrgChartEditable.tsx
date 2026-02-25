@@ -259,11 +259,9 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
         : await orgApi.getTree(teamId);
       setTreeData(treeRes.data);
 
-      // 사용자 목록은 단일 팀 뷰에서만 로드 (BU 뷰에서는 드래그 미지원)
-      if (!buId) {
-        const usersRes = await teamAdminApi.getUsers();
-        setUsers(usersRes.data.users || []);
-      }
+      // 사용자 목록 로드 (드래그 재배치용)
+      const usersRes = await teamAdminApi.getUsers();
+      setUsers(usersRes.data.users || []);
     } catch { setError('조직도를 불러올 수 없습니다.'); }
     finally { setLoading(false); }
   };
@@ -602,7 +600,7 @@ export default function OrgChartEditable({ teamId, buId, editLevel, editTargetId
       </div>
 
       {/* 사용자 목록 (드래그 소스) — 단일 팀 뷰에서만 */}
-      {!isBUView && canEditSubGroup && users.length > 0 && (
+      {canEditSubGroup && users.length > 0 && (
         <div>
           <h3 className="text-xs font-semibold text-gray-500 mb-2">
             팀원 ({users.length}명) — 파트 노드로 드래그하여 재배치
