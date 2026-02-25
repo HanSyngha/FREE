@@ -77,6 +77,8 @@ worklogRoutes.post('/', authenticateToken, loadUser, itemCreateLimit, llmLimit, 
       text,
       {
         username: user.username,
+        loginid: user.loginid,
+        deptname: user.deptname,
         businessUnit: user.businessUnit,
         teamName: team?.name || '',
         groupName: group?.name || '',
