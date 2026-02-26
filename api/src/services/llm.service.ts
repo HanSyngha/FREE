@@ -562,6 +562,65 @@ ${todosStr}${workLogsStr}
 }
 
 /**
+ * LLM으로 WorkLog 배치 → 파트 Item 자동 연결
+ */
+export async function linkWorkLogsToItems(
+  workLogs: Array<{ id: string; title: string }>,
+  partItems: Array<{ id: string; title: string }>,
+  userInfo: { loginid: string; username: string; deptname: string }
+): Promise<Array<{ id: string; linkedItemId: string | null }>> {
+  if (workLogs.length === 0 || partItems.length === 0) return workLogs.map(w => ({ id: w.id, linkedItemId: null }));
+
+  const systemPrompt = `당신은 업무기록과 조직 목표를 연결하는 도우미입니다.
+
+## 파트 목표 목록
+${partItems.map(i => `- id: "${i.id}", title: "${i.title}"`).join('\n')}
+
+## 업무기록 목록
+${workLogs.map(w => `- id: "${w.id}", title: "${w.title}"`).join('\n')}
+
+## 작업
+각 업무기록이 위 목표 중 어떤 것과 가장 관련이 있는지 판단해 주세요.
+
+## 연결 기준
+- 업무의 내용이 목표의 **핵심 활동과 직접적으로 관련**될 때만 연결
+- 간접적 관련성(회의, 세미나 등)은 null
+- 확신이 70% 미만이면 null
+- 여러 목표와 관련될 수 있으면 가장 관련도 높은 하나만 선택
+
+다음 JSON 형식으로 출력하세요:
+{ "mappings": [{ "id": "업무기록ID", "linkedItemId": "목표ID 또는 null" }] }
+
+반드시 유효한 JSON만 출력하세요.`;
+
+  const result = await callLLM(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: '매핑 분석 요청' }],
+    userInfo,
+    'LINK_TODO'
+  );
+
+  const jsonMatch = result.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return workLogs.map(w => ({ id: w.id, linkedItemId: null }));
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const validItemIds = new Set(partItems.map(i => i.id));
+    const validWorkLogIds = new Set(workLogs.map(w => w.id));
+
+    return workLogs.map(w => {
+      const mapping = (parsed.mappings || []).find((m: any) => m.id === w.id);
+      const linkedId = mapping?.linkedItemId || null;
+      return {
+        id: w.id,
+        linkedItemId: linkedId && validItemIds.has(linkedId) ? linkedId : null,
+      };
+    });
+  } catch {
+    return workLogs.map(w => ({ id: w.id, linkedItemId: null }));
+  }
+}
+
+/**
  * LLM으로 Todo → 파트 Item 자동 연결
  */
 export async function linkTodoToItem(
