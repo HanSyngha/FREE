@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUser, isSuperAdmin } from '../middleware/auth.js';
 import { itemCreateLimit, llmLimit } from '../middleware/rateLimit.js';
-import { parseTextWithLLM } from '../services/llm.service.js';
+import { parseTextWithLLM, linkWorkLogsToItems } from '../services/llm.service.js';
 import { getKSTTodayString, getKSTMidnight, parseKSTDate, parseDateForDB, getKSTTodayForDB } from '../utils/date.js';
 
 export const worklogRoutes = Router();
@@ -300,8 +300,8 @@ worklogRoutes.put('/:id', authenticateToken, loadUser, async (req: Authenticated
   }
 });
 
-// POST /worklogs/external - 인증 없이 loginid로 업무 항목 직접 추가
-worklogRoutes.post('/external', async (req, res) => {
+// POST /worklogs/external - 인증 없이 loginid로 업무 항목 직접 추가 (+LLM Item 연결)
+worklogRoutes.post('/external', llmLimit, async (req, res) => {
   try {
     const { loginid, items } = req.body;
     if (!loginid || typeof loginid !== 'string') { res.status(400).json({ error: 'loginid는 필수입니다.' }); return; }
@@ -347,6 +347,29 @@ worklogRoutes.post('/external', async (req, res) => {
       }
       return results;
     });
+
+    // LLM으로 파트 Item 자동 연결 (비동기, 실패해도 응답에 영향 없음)
+    if (user.partId) {
+      const partItems = await prisma.item.findMany({
+        where: { level: 'PART', ownerId: user.partId, status: { not: 'COMPLETED' } },
+        select: { id: true, title: true },
+      });
+      if (partItems.length > 0) {
+        const userInfo = { loginid: user.loginid, username: user.username, deptname: user.deptname };
+        linkWorkLogsToItems(
+          createdItems.map(w => ({ id: w.id, title: w.title })),
+          partItems,
+          userInfo
+        ).then(async (mappings) => {
+          const updates = mappings.filter(m => m.linkedItemId);
+          if (updates.length > 0) {
+            await Promise.all(updates.map(m =>
+              prisma.workLog.update({ where: { id: m.id }, data: { linkedItemId: m.linkedItemId } })
+            ));
+          }
+        }).catch(e => console.error('[External WorkLog AutoMap] Error:', e.message));
+      }
+    }
 
     res.json({ success: true, items: createdItems, count: createdItems.length, message: `${createdItems.length}건의 업무가 추가되었습니다.`, link: 'https://52.78.246.50.nip.io:6090' });
   } catch (error) {
