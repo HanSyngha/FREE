@@ -74,7 +74,7 @@ async function callLLMWorker(messages: Array<{ role: string; content: string }>)
     'X-Service-Id': LLM_SERVICE_ID,
     'X-User-Id': 'system-worker',
     'X-User-Name': 'FREE%20Worker',
-    'X-User-Dept': 'system',
+    'X-User-Dept': encodeURIComponent('S/W혁신팀(S.LSI)'),
   };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
