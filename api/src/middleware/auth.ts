@@ -239,7 +239,7 @@ export function requireGoalEdit() {
     }
 
     // 소속 그룹/파트 멤버 → 자기 조직의 목표만 수정 가능
-    const goalId = req.params.id;
+    const goalId = req.params.id as string | undefined;
     if (goalId && (user.groupId || user.partId)) {
       const goal = await prisma.item.findUnique({ where: { id: goalId }, select: { level: true, ownerId: true } });
       if (goal &&
