@@ -30,7 +30,9 @@ export default function PersonalSpaceOther() {
     try {
       await itemsApi.delete(id);
       fetchItems();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '삭제에 실패했습니다.');
+    }
   };
 
   // 날짜 URL param에 해당하는 섹션으로 자동 스크롤

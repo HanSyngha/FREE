@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { authenticateToken, AuthenticatedRequest, loadUser, requireGoalEdit } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest, loadUser, requireGoalEdit, isSuperAdmin } from '../middleware/auth.js';
 import { llmLimit } from '../middleware/rateLimit.js';
 import { parseGoalsWithLLM, autoMapNewGoal, autoMapTodosAndWorkLogs } from '../services/llm.service.js';
 import { parseDateForDB } from '../utils/date.js';
@@ -21,6 +21,18 @@ goalRoutes.post('/', authenticateToken, loadUser, llmLimit, async (req: Authenti
     if (!ownerId) { res.status(400).json({ error: 'ownerId는 필수입니다.' }); return; }
 
     if (!user.teamId) { res.status(400).json({ error: '팀이 배정되지 않았습니다.' }); return; }
+
+    // 권한 체크: 자기 소속 조직의 목표만 생성 가능
+    const isSA = isSuperAdmin(req.user!.loginid);
+    const teamAdmins = await prisma.teamAdmin.findMany({ where: { userId: user.id } });
+    const isTA = teamAdmins.length > 0;
+    if (!isSA && !isTA) {
+      if ((level === 'GROUP' && ownerId !== user.groupId) ||
+          (level === 'PART' && ownerId !== user.partId) ||
+          (level === 'BU' || level === 'TEAM')) {
+        res.status(403).json({ error: '목표 생성 권한이 없습니다.' }); return;
+      }
+    }
 
     // 기존 상위/하위 Item 리스트 조회
     const existingItems = await prisma.item.findMany({

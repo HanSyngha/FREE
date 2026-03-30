@@ -33,7 +33,9 @@ export default function TodoSection({ todos, onUpdate, canEdit = false, goalCand
     try {
       await todosApi.update(todo.id, { completed: !todo.completed });
       onUpdate();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '상태 변경에 실패했습니다.');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -41,7 +43,9 @@ export default function TodoSection({ todos, onUpdate, canEdit = false, goalCand
     try {
       await todosApi.delete(id);
       onUpdate();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '할일 삭제에 실패했습니다.');
+    }
   };
 
   const handleStartEdit = (todo: Todo) => {
@@ -55,7 +59,9 @@ export default function TodoSection({ todos, onUpdate, canEdit = false, goalCand
       await todosApi.update(id, { title: editTitle.trim() });
       setEditingId(null);
       onUpdate();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '할일 수정에 실패했습니다.');
+    }
   };
 
   const handleChangeMapping = async (todoId: string, linkedItemId: string | null) => {
@@ -63,7 +69,9 @@ export default function TodoSection({ todos, onUpdate, canEdit = false, goalCand
       await todosApi.update(todoId, { linkedItemId });
       setMappingId(null);
       onUpdate();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '매핑 변경에 실패했습니다.');
+    }
   };
 
   if (todos.length === 0) {
