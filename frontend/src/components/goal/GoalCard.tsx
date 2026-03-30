@@ -65,7 +65,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
     try {
       await goalsApi.update(goal.id, data);
       onUpdate?.();
-    } catch {} finally { setSaving(false); }
+    } catch (err: any) {
+      alert(err.response?.data?.error || '저장에 실패했습니다.');
+    } finally { setSaving(false); }
   };
 
   const handleSaveSummary = () => {
@@ -77,7 +79,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
     try {
       await goalsApi.updateMapping(goal.id, { parentItemId });
       onUpdate?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '매핑 변경에 실패했습니다.');
+    }
     setShowParentSelect(false);
   };
 
@@ -85,7 +89,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
     try {
       await goalsApi.updateMapping(childId, { parentItemId: goal.id });
       onUpdate?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '하위 목표 추가에 실패했습니다.');
+    }
     setShowChildSelect(false);
   };
 
@@ -93,21 +99,27 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
     try {
       await goalsApi.updateMapping(childId, { parentItemId: null });
       onUpdate?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '하위 목표 제거에 실패했습니다.');
+    }
   };
 
   const handleUnlinkTodo = async (todoId: string) => {
     try {
       await todosApi.update(todoId, { linkedItemId: null });
       onUpdate?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '할일 연결 해제에 실패했습니다.');
+    }
   };
 
   const handleUnlinkWorkLog = async (workLogId: string) => {
     try {
       await workLogsApi.update(workLogId, { linkedItemId: null });
       onUpdate?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '업무기록 연결 해제에 실패했습니다.');
+    }
   };
 
   if (compact) {
@@ -381,7 +393,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
             <div className="pt-2 border-t border-gray-100">
               <button onClick={async () => {
                 if (!confirm('이 목표를 삭제하시겠습니까?')) return;
-                try { await goalsApi.delete(goal.id); onUpdate?.(); } catch {}
+                try { await goalsApi.delete(goal.id); onUpdate?.(); } catch (err: any) {
+                  alert(err.response?.data?.error || '목표 삭제에 실패했습니다.');
+                }
               }} className="text-xs text-red-500 hover:text-red-700">목표 삭제</button>
             </div>
           )}

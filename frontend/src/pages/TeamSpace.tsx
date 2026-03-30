@@ -94,7 +94,9 @@ export default function TeamSpace() {
       a.download = `${data?.team?.name || '팀'}_보고서.${format}`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '보고서 내보내기에 실패했습니다.');
+    }
   };
 
   const handleResume = async () => {
