@@ -381,7 +381,9 @@ export default function GoalCard({ goal, canEdit = false, compact = false, defau
             <div className="pt-2 border-t border-gray-100">
               <button onClick={async () => {
                 if (!confirm('이 목표를 삭제하시겠습니까?')) return;
-                try { await goalsApi.delete(goal.id); onUpdate?.(); } catch {}
+                try { await goalsApi.delete(goal.id); onUpdate?.(); } catch (err: any) {
+                  alert(err.response?.data?.error || '목표 삭제에 실패했습니다.');
+                }
               }} className="text-xs text-red-500 hover:text-red-700">목표 삭제</button>
             </div>
           )}

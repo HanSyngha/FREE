@@ -166,9 +166,65 @@ export default function Profile() {
 
         <button onClick={() => setShowOrgChange(!showOrgChange)}
           className="mt-4 text-sm text-primary-600 hover:underline">
-          그룹/파트 변경
+          {showOrgChange ? '취소' : '그룹/파트 변경'}
         </button>
       </div>
+
+      {/* 그룹/파트 변경 폼 */}
+      {showOrgChange && (
+        <div className="bg-white rounded-xl border border-primary-200 p-6 mb-6">
+          <h2 className="text-sm font-bold text-gray-700 mb-4">그룹/파트 변경</h2>
+
+          {error && <div className="mb-3 p-2 bg-red-50 text-red-600 text-sm rounded">{error}</div>}
+
+          {/* 그룹 */}
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-600 mb-1">그룹</label>
+            {!isNewGroup ? (
+              <div>
+                <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedPartId(''); }}
+                  className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="">선택</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+                <button onClick={() => setIsNewGroup(true)} className="text-xs text-primary-600 mt-1">+ 새 그룹</button>
+              </div>
+            ) : (
+              <div>
+                <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="새 그룹 이름" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); }} className="text-xs text-gray-500 mt-1">기존 선택</button>
+              </div>
+            )}
+          </div>
+
+          {/* 파트 */}
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-600 mb-1">파트</label>
+            {!isNewPart ? (
+              <div>
+                <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm" disabled={!selectedGroupId && !isNewGroup}>
+                  <option value="">선택</option>
+                  {parts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <button onClick={() => setIsNewPart(true)} className="text-xs text-primary-600 mt-1">+ 새 파트</button>
+              </div>
+            ) : (
+              <div>
+                <input value={newPartName} onChange={(e) => setNewPartName(e.target.value)}
+                  placeholder="새 파트 이름" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <button onClick={() => { setIsNewPart(false); setNewPartName(''); }} className="text-xs text-gray-500 mt-1">기존 선택</button>
+              </div>
+            )}
+          </div>
+
+          <button onClick={handleSaveOrg} disabled={saving}
+            className="w-full py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50">
+            {saving ? '저장 중...' : '변경 저장'}
+          </button>
+        </div>
+      )}
 
       {/* 업무 기록 설정 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
@@ -246,62 +302,6 @@ export default function Profile() {
           {prefSaving ? '저장 중...' : prefSuccess ? '저장됨!' : '설정 저장'}
         </button>
       </div>
-
-      {/* 그룹/파트 변경 폼 */}
-      {showOrgChange && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">그룹/파트 변경</h2>
-
-          {error && <div className="mb-3 p-2 bg-red-50 text-red-600 text-sm rounded">{error}</div>}
-
-          {/* 그룹 */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1">그룹</label>
-            {!isNewGroup ? (
-              <div>
-                <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setSelectedPartId(''); }}
-                  className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="">선택</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-                <button onClick={() => setIsNewGroup(true)} className="text-xs text-primary-600 mt-1">+ 새 그룹</button>
-              </div>
-            ) : (
-              <div>
-                <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="새 그룹 이름" className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <button onClick={() => { setIsNewGroup(false); setNewGroupName(''); }} className="text-xs text-gray-500 mt-1">기존 선택</button>
-              </div>
-            )}
-          </div>
-
-          {/* 파트 */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1">파트</label>
-            {!isNewPart ? (
-              <div>
-                <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg text-sm" disabled={!selectedGroupId && !isNewGroup}>
-                  <option value="">선택</option>
-                  {parts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-                <button onClick={() => setIsNewPart(true)} className="text-xs text-primary-600 mt-1">+ 새 파트</button>
-              </div>
-            ) : (
-              <div>
-                <input value={newPartName} onChange={(e) => setNewPartName(e.target.value)}
-                  placeholder="새 파트 이름" className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <button onClick={() => { setIsNewPart(false); setNewPartName(''); }} className="text-xs text-gray-500 mt-1">기존 선택</button>
-              </div>
-            )}
-          </div>
-
-          <button onClick={handleSaveOrg} disabled={saving}
-            className="w-full py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50">
-            {saving ? '저장 중...' : '변경 저장'}
-          </button>
-        </div>
-      )}
 
       {/* 활동 로그 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
