@@ -21,7 +21,9 @@ export default function TodoInputForm({ onCreated }: TodoInputFormProps) {
       setTitle('');
       setEndDate('');
       onCreated();
-    } catch {} finally {
+    } catch (err: any) {
+      alert(err.response?.data?.error || '할일 추가에 실패했습니다.');
+    } finally {
       setSubmitting(false);
     }
   };

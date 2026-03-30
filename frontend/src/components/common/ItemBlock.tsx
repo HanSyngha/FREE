@@ -64,7 +64,9 @@ export default function WorkLogBlock({ item, editable = false, deletable = false
       await workLogsApi.update(item.id, { linkedItemId });
       setShowMappingSelect(false);
       onRefresh?.();
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '매핑 변경에 실패했습니다.');
+    }
   };
 
   return (

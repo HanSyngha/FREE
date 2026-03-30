@@ -130,7 +130,9 @@ export default function PersonalSpace() {
     try {
       await workLogsApi.update(id, data);
       await fetchData();
-    } catch { }
+    } catch (err: any) {
+      alert(err.response?.data?.error || '수정에 실패했습니다.');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -138,14 +140,18 @@ export default function PersonalSpace() {
     try {
       await workLogsApi.delete(id);
       await fetchData();
-    } catch { }
+    } catch (err: any) {
+      alert(err.response?.data?.error || '삭제에 실패했습니다.');
+    }
   };
 
   const handleToggleTodo = async (todo: Todo) => {
     try {
       await todosApi.update(todo.id, { completed: !todo.completed });
       await fetchData();
-    } catch { }
+    } catch (err: any) {
+      alert(err.response?.data?.error || '상태 변경에 실패했습니다.');
+    }
   };
 
   const handleDeleteTodo = async (id: string) => {
@@ -153,7 +159,9 @@ export default function PersonalSpace() {
     try {
       await todosApi.delete(id);
       await fetchData();
-    } catch { }
+    } catch (err: any) {
+      alert(err.response?.data?.error || '삭제에 실패했습니다.');
+    }
   };
 
   const handleAddTodo = async () => {
@@ -197,7 +205,9 @@ export default function PersonalSpace() {
       a.download = `${user?.username || '개인'}_보고서.${format}`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {}
+    } catch (err: any) {
+      alert(err.response?.data?.error || '보고서 내보내기에 실패했습니다.');
+    }
   };
 
   const handleDeleteReport = async (reportId: string) => {
